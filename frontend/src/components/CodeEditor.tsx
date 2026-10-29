@@ -56,13 +56,18 @@ export default function CodeEditor({ value, onChange, language = 'solidity', dis
   }
 
   return (
-    <div className="relative rounded-lg border border-argus-border bg-argus-panel overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2 bg-black/30 border-b border-argus-border">
-        <span className="text-xs text-argus-muted font-mono">{language}</span>
+    <div className={`relative rounded-xl border bg-argus-panel overflow-hidden transition-all duration-300 ${
+      disabled ? 'border-argus-border/40 opacity-80' : 'border-argus-border hover:border-argus-border/80 focus-within:border-blue-500/50 focus-within:shadow-lg focus-within:shadow-blue-900/20'
+    }`}>
+      {/* Editor title bar */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-black/40 border-b border-argus-border/60">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-argus-muted/70 font-mono">{language}</span>
+        </div>
         <div className="flex gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-red-500/60" />
-          <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
-          <div className="w-3 h-3 rounded-full bg-green-500/60" />
+          <div className="w-3 h-3 rounded-full bg-red-500/70 hover:bg-red-500 transition-colors" />
+          <div className="w-3 h-3 rounded-full bg-yellow-500/70 hover:bg-yellow-500 transition-colors" />
+          <div className="w-3 h-3 rounded-full bg-green-500/70 hover:bg-green-500 transition-colors" />
         </div>
       </div>
       <textarea
@@ -73,7 +78,7 @@ export default function CodeEditor({ value, onChange, language = 'solidity', dis
         placeholder={PLACEHOLDER}
         disabled={disabled}
         spellCheck={false}
-        className="w-full p-4 bg-transparent text-sm font-mono text-gray-200 resize-none outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-argus-muted/40"
+        className="w-full p-4 bg-transparent text-sm font-mono text-gray-200 resize-none outline-none leading-relaxed disabled:cursor-not-allowed placeholder:text-argus-muted/30"
         style={{ minHeight: 320, maxHeight: 480 }}
       />
     </div>

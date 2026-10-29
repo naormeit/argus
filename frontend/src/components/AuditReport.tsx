@@ -95,29 +95,38 @@ const RISK_GRADIENT: Record<string, string> = {
   info:     'from-gray-900/30 to-argus-panel',
 }
 
+const RISK_GLOW: Record<string, string> = {
+  critical: 'shadow-lg shadow-red-900/30',
+  high:     'shadow-lg shadow-orange-900/25',
+  medium:   'shadow-md shadow-yellow-900/20',
+  low:      'shadow-md shadow-blue-900/20',
+  info:     '',
+}
+
 export default function AuditReport({ report }: Props) {
   const [sigOpen, setSigOpen] = useState(false)
 
   const riskColor    = SEVERITY_COLOR[report.overall_risk]
   const riskGradient = RISK_GRADIENT[report.overall_risk] ?? 'from-argus-panel to-argus-panel'
+  const riskGlow     = RISK_GLOW[report.overall_risk] ?? ''
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 animate-fade-in-up">
       {/* Report header card */}
-      <div className={`rounded-xl border border-argus-border bg-gradient-to-b ${riskGradient} p-5`}>
+      <div className={`rounded-xl border border-argus-border bg-gradient-to-b ${riskGradient} p-5 ${riskGlow}`}>
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
-            <h2 className="text-base font-bold text-white">Audit Report</h2>
+            <h2 className="text-base font-bold text-white tracking-tight">Audit Report</h2>
             <div className="text-[10px] text-argus-muted mt-0.5 font-mono">{report.audit_id}</div>
             <div className="text-[10px] text-argus-muted">{new Date(report.timestamp).toLocaleString()}</div>
           </div>
-          <span className={`text-xs font-bold uppercase tracking-widest px-3 py-1.5 rounded-full border ${riskColor}`}>
+          <span className={`text-xs font-bold uppercase tracking-widest px-3 py-1.5 rounded-full border animate-fade-in ${riskColor}`}>
             {report.overall_risk} risk
           </span>
         </div>
 
         {report.summary && (
-          <p className="mt-4 text-xs text-gray-300 leading-relaxed border-t border-argus-border/50 pt-4">
+          <p className="mt-4 text-xs text-gray-300 leading-relaxed border-t border-white/5 pt-4">
             {report.summary}
           </p>
         )}
@@ -126,18 +135,16 @@ export default function AuditReport({ report }: Props) {
         <div className="mt-4 flex items-center gap-3 text-xs flex-wrap">
           <button
             onClick={() => setSigOpen(v => !v)}
-            className="flex items-center gap-1.5 text-argus-muted hover:text-white transition-colors"
+            className="flex items-center gap-1.5 text-argus-muted hover:text-white transition-colors group"
           >
-            <span className="text-purple-400">🔏</span>
+            <span className="text-purple-400 group-hover:scale-110 transition-transform inline-block">🔏</span>
             <span>HMAC-SHA256</span>
-            <span className="text-green-400">✓ valid</span>
+            <span className="text-green-400 font-semibold">✓ valid</span>
           </button>
-          {sigOpen && (
-            <CopyButton text={report.signature} label="Copy sig" />
-          )}
+          {sigOpen && <CopyButton text={report.signature} label="Copy sig" />}
         </div>
         {sigOpen && (
-          <div className="mt-2 p-2.5 bg-black/50 rounded-lg border border-purple-500/20 font-mono text-[10px] text-purple-300 break-all leading-relaxed">
+          <div className="animate-fade-in mt-2 p-2.5 bg-black/50 rounded-lg border border-purple-500/20 font-mono text-[10px] text-purple-300 break-all leading-relaxed">
             {report.signature}
           </div>
         )}
@@ -145,7 +152,7 @@ export default function AuditReport({ report }: Props) {
         {/* Code hash */}
         <div className="mt-2 flex items-center gap-2 text-[10px] text-argus-muted font-mono">
           <span>SHA-256:</span>
-          <span className="text-argus-muted/70">{report.code_hash}</span>
+          <span className="text-argus-muted/60 truncate max-w-[260px]">{report.code_hash}</span>
           <CopyButton text={report.code_hash} label="Copy" />
         </div>
       </div>
@@ -157,12 +164,12 @@ export default function AuditReport({ report }: Props) {
             {report.findings.length} Finding{report.findings.length !== 1 ? 's' : ''}
           </h3>
           {report.findings.length > 0 && (
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
               {(['critical', 'high', 'medium', 'low'] as const).map(sev => {
                 const n = report.findings.filter(f => f.severity === sev).length
                 if (!n) return null
                 return (
-                  <span key={sev} className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${SEVERITY_COLOR[sev]}`}>
+                  <span key={sev} className={`text-[10px] px-2 py-0.5 rounded-full border font-mono ${SEVERITY_COLOR[sev]}`}>
                     {n} {sev}
                   </span>
                 )
@@ -171,12 +178,16 @@ export default function AuditReport({ report }: Props) {
           )}
         </div>
         {report.findings.length === 0 ? (
-          <div className="rounded-lg border border-green-700/40 bg-green-900/20 p-4 text-sm text-green-400 flex items-center gap-2">
+          <div className="rounded-lg border border-green-700/40 bg-green-900/20 p-4 text-sm text-green-400 flex items-center gap-2 glow-green">
             <span>✓</span>
             <span>No vulnerabilities found. Code appears secure.</span>
           </div>
         ) : (
-          report.findings.map((f, i) => <FindingCard key={i} finding={f} />)
+          report.findings.map((f, i) => (
+            <div key={i} className={`animate-fade-in-up stagger-${Math.min(i + 1, 5)}`}>
+              <FindingCard finding={f} />
+            </div>
+          ))
         )}
       </div>
     </div>
