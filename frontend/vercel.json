@@ -1,6 +1,7 @@
 {
   "rewrites": [
-    { "source": "/audit/:path*", "destination": "https://4caf43baeb9482.lhr.life/audit/:path*" },
-    { "source": "/health",       "destination": "https://4caf43baeb9482.lhr.life/health" }
+    { "source": "/api/audit/:path*", "destination": "https://5ed3ca0b8bb7c1.lhr.life/audit/:path*" },
+    { "source": "/api/health",       "destination": "https://5ed3ca0b8bb7c1.lhr.life/health" },
+    { "source": "/(.*)",             "destination": "/index.html" }
   ]
 }
