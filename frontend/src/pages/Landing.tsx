@@ -106,7 +106,7 @@ function TerminalPreview() {
               { name: 'Hunter',  time: '14s', label: '3 exploit paths found'  },
               { name: 'Forge',   time: '22s', label: 'PoC exploit generated'  },
               { name: 'Arbiter', time: '6s',  label: 'report verified & signed' },
-            ].map(({ name, time, label }) => (
+            ].map(({ name, time }) => (
               <div key={name} className="flex items-center gap-3">
                 <span className="text-white/20 text-xs w-4">↳</span>
                 <span className="text-white/60 w-14 text-xs">{name}</span>
