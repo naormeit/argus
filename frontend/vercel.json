@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/audit/:path*", "destination": "https://YOUR_RAILWAY_URL/audit/:path*" },
+    { "source": "/health",       "destination": "https://YOUR_RAILWAY_URL/health" }
+  ]
+}
