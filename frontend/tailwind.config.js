@@ -4,15 +4,25 @@ export default {
   theme: {
     extend: {
       colors: {
+        /* Legacy audit-tool tokens (kept for component compatibility) */
         argus: {
-          bg:     '#0d1117',
-          panel:  '#161b22',
-          border: '#30363d',
-          accent: '#238636',
+          bg:     '#121111',
+          panel:  '#1a1816',
+          border: '#2a2520',
+          accent: '#D4A052',
           red:    '#da3633',
-          yellow: '#e3b341',
-          blue:   '#58a6ff',
-          muted:  '#8b949e',
+          yellow: '#D4A052',
+          blue:   '#234F60',
+          muted:  '#9a9186',
+        },
+        /* Luxury palette */
+        lux: {
+          black:   '#121111',
+          sapphire:'#234F60',
+          gold:    '#D4A052',
+          ice:     '#DFE6E6',
+          silver:  '#EFEFEF',
+          white:   '#FFFFFF',
         },
       },
       fontFamily: {
