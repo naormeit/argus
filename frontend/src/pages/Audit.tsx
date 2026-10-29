@@ -138,10 +138,10 @@ export default function Audit() {
   }
 
   return (
-    <div className="min-h-screen bg-argus-bg text-white relative overflow-x-hidden">
+    <div className="min-h-screen bg-black text-white relative overflow-x-hidden">
       {/* Background */}
-      <div className="fixed inset-0 bg-dot-grid opacity-40 pointer-events-none" />
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[700px] h-[260px] bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed inset-0 pointer-events-none opacity-[0.015]"
+        style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
 
       <main className="relative z-10 max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
         {/* Left column */}
