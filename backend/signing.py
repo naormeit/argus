@@ -10,7 +10,6 @@ Maps Argus agent handoff fields onto the ATP packet schema:
 import hashlib
 import hmac
 import json
-import os
 import time
 import uuid
 from typing import Any
@@ -20,7 +19,9 @@ _EXPIRY_MS = 300_000   # 5-minute TTL for handoff envelopes
 
 
 def _compute_signature(packet: dict, secret: str) -> str:
-    canonical = json.dumps(packet, sort_keys=True)
+    """Hash all fields except 'signature' so signing and verification agree."""
+    signable = {k: v for k, v in packet.items() if k != "signature"}
+    canonical = json.dumps(signable, sort_keys=True)
     return hmac.new(secret.encode(), canonical.encode(), hashlib.sha256).hexdigest()
 
 
@@ -34,12 +35,7 @@ def attach_signature(packet: dict, secret: str) -> dict:
 
 def verify_signature(packet: dict, secret: str) -> bool:
     expected = packet.get("signature", "")
-    check = {k: v for k, v in packet.items() if k != "signature"}
-    check["signature"] = ""
-    # recompute with signature field empty to match what was signed
-    candidate = {**packet}
-    actual = _compute_signature({k: v for k, v in candidate.items() if k != "signature"} | {"signature": ""}, secret)
-    # constant-time compare
+    actual = _compute_signature(packet, secret)
     return hmac.compare_digest(expected, actual)
 
 
@@ -70,18 +66,17 @@ class ArgusLedger:
         ts = envelope.get("timestamp", 0)
         if time.time() - ts > _EXPIRY_MS / 1000:
             return False
+        # Reconstruct the packet as it was when signed (without from/to/transfer_id)
         packet = {
-            "agent_id":    envelope.get("from", ""),
-            "intent":      envelope.get("to", ""),
+            "agent_id":    envelope.get("agent_id", envelope.get("from", "")),
+            "intent":      envelope.get("intent",    envelope.get("to", "")),
             "intent_hash": self._payload_hash(payload),
             "expiry":      envelope.get("expiry", _EXPIRY_MS),
             "nonce":       envelope.get("nonce", ""),
-            "timestamp":   envelope.get("timestamp", 0),
-            "signature":   "",
+            "timestamp":   ts,
+            "signature":   envelope.get("signature", ""),
         }
-        expected = envelope.get("signature", "")
-        actual = _compute_signature(packet, self._secret)
-        return hmac.compare_digest(expected, actual)
+        return verify_signature(packet, self._secret)
 
     def sign_report(self, report_data: dict) -> str:
         packet = {
