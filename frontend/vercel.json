@@ -1,7 +1,7 @@
 {
   "rewrites": [
-    { "source": "/api/audit/:path*", "destination": "https://argus-backend.onrender.com/audit/:path*" },
-    { "source": "/api/health",       "destination": "https://argus-backend.onrender.com/health" },
+    { "source": "/api/audit/:path*", "destination": "https://argus-backend-1ge3.onrender.com/audit/:path*" },
+    { "source": "/api/health",       "destination": "https://argus-backend-1ge3.onrender.com/health" },
     { "source": "/(.*)",             "destination": "/index.html" }
   ]
 }
