@@ -1,25 +1,50 @@
 """
-Argus signing layer — powered by the loom-protocol SDK.
+Argus signing layer — Loom-Protocol implemented with Python hmac/hashlib.
 
-Maps Argus agent handoff fields onto loom-protocol's ATP packet schema:
+Maps Argus agent handoff fields onto the ATP packet schema:
   agent_id    ← from_agent (the sender)
   intent      ← to_agent   (the intended receiver)
   intent_hash ← SHA-256 hash of the serialized payload
   expiry      ← 300 000 ms (5-minute TTL)
 """
 import hashlib
+import hmac
 import json
+import os
 import time
+import uuid
 from typing import Any
-
-from core.security.signing import attach_signature, verify_signature
 
 
 _EXPIRY_MS = 300_000   # 5-minute TTL for handoff envelopes
 
 
+def _compute_signature(packet: dict, secret: str) -> str:
+    canonical = json.dumps(packet, sort_keys=True)
+    return hmac.new(secret.encode(), canonical.encode(), hashlib.sha256).hexdigest()
+
+
+def attach_signature(packet: dict, secret: str) -> dict:
+    signed = dict(packet)
+    signed["nonce"] = str(uuid.uuid4())
+    signed["timestamp"] = time.time()
+    signed["signature"] = _compute_signature(signed, secret)
+    return signed
+
+
+def verify_signature(packet: dict, secret: str) -> bool:
+    expected = packet.get("signature", "")
+    check = {k: v for k, v in packet.items() if k != "signature"}
+    check["signature"] = ""
+    # recompute with signature field empty to match what was signed
+    candidate = {**packet}
+    actual = _compute_signature({k: v for k, v in candidate.items() if k != "signature"} | {"signature": ""}, secret)
+    # constant-time compare
+    return hmac.compare_digest(expected, actual)
+
+
 class ArgusLedger:
-    """Atomic ledger for signed agent handoffs via loom-protocol."""
+    """Atomic ledger for signed agent handoffs via Loom-Protocol."""
 
     def __init__(self, secret_key: str):
         self._secret = secret_key
@@ -35,9 +60,7 @@ class ArgusLedger:
             "intent_hash": self._payload_hash(payload),
             "expiry":      _EXPIRY_MS,
         }
-        # attach_signature (loom-protocol SDK) adds nonce, timestamp, signature
         signed = attach_signature(packet, self._secret)
-        # keep original agent names for routing
         signed["from"]        = from_agent
         signed["to"]          = to_agent
         signed["transfer_id"] = transfer_id
@@ -47,17 +70,18 @@ class ArgusLedger:
         ts = envelope.get("timestamp", 0)
         if time.time() - ts > _EXPIRY_MS / 1000:
             return False
-        # Reconstruct the canonical ATP packet that was signed
         packet = {
             "agent_id":    envelope.get("from", ""),
             "intent":      envelope.get("to", ""),
             "intent_hash": self._payload_hash(payload),
             "expiry":      envelope.get("expiry", _EXPIRY_MS),
             "nonce":       envelope.get("nonce", ""),
-            "timestamp":   ts,
-            "signature":   envelope.get("signature", ""),
+            "timestamp":   envelope.get("timestamp", 0),
+            "signature":   "",
         }
-        return verify_signature(packet, self._secret)
+        expected = envelope.get("signature", "")
+        actual = _compute_signature(packet, self._secret)
+        return hmac.compare_digest(expected, actual)
 
     def sign_report(self, report_data: dict) -> str:
         packet = {

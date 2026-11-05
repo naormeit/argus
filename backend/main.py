@@ -35,7 +35,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Argus — Multi-Agent Security Auditor", version="0.1.0", lifespan=lifespan)
 
 _extra_origins = os.getenv("CORS_ORIGINS", "").split(",")
-_origins = ["http://localhost:5173", "http://127.0.0.1:5173"] + [o for o in _extra_origins if o]
+_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://frontend-eight-theta-43.vercel.app",
+] + [o for o in _extra_origins if o]
 
 app.add_middleware(
     CORSMiddleware,
