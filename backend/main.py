@@ -37,8 +37,11 @@ if _db_enabled:
 async def lifespan(app: FastAPI):
     log.info("Argus backend starting up.")
     if _db_enabled:
-        await get_pool()
-        log.info("Database connected.")
+        try:
+            await get_pool()
+            log.info("Database connected.")
+        except Exception as exc:
+            log.warning("Database unavailable at startup (%s) — persistence disabled.", exc)
     else:
         log.warning("DATABASE_URL not set — audit persistence disabled.")
     yield
