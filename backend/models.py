@@ -65,9 +65,24 @@ class AuditReport(BaseModel):
 
 
 class AuditRequest(BaseModel):
-    code:      str
-    language:  str = "solidity"
-    audit_id:  Optional[str] = None
+    code:        str
+    language:    str = "solidity"
+    audit_id:    Optional[str] = None
+    source_type: str = "paste"          # 'paste' | 'address'
+    source_ref:  Optional[str] = None   # contract address
+    network:     Optional[str] = None   # 'ethereum' | 'base' | ...
+
+
+class AuditListItem(BaseModel):
+    id:             str
+    created_at:     str
+    language:       str
+    source_type:    str
+    source_ref:     Optional[str] = None
+    network:        Optional[str] = None
+    overall_risk:   Optional[str] = None
+    findings_count: int = 0
+    summary:        Optional[str] = None
 
 
 class AuditStatus(BaseModel):

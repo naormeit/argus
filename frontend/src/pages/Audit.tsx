@@ -1,10 +1,19 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import CodeEditor from '../components/CodeEditor'
 import AgentTimeline from '../components/AgentTimeline'
 import AuditReport from '../components/AuditReport'
 import { AgentStatus, AuditReport as Report } from '../types'
 
 const LANGUAGES = ['solidity', 'python', 'javascript', 'typescript', 'rust', 'go']
+
+const NETWORKS = [
+  { value: 'ethereum', label: 'Ethereum' },
+  { value: 'base',     label: 'Base' },
+  { value: 'polygon',  label: 'Polygon' },
+  { value: 'arbitrum', label: 'Arbitrum' },
+  { value: 'bsc',      label: 'BSC' },
+]
 
 const VULNERABLE_BANK = `// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
@@ -32,18 +41,43 @@ contract VulnerableBank {
     }
 }`
 
+type InputTab = 'paste' | 'address'
+
 export default function Audit() {
+  const navigate = useNavigate()
+
+  const [inputTab, setInputTab]       = useState<InputTab>('paste')
   const [code, setCode]               = useState(VULNERABLE_BANK)
   const [language, setLanguage]       = useState('solidity')
+  const [address, setAddress]         = useState('')
+  const [network, setNetwork]         = useState('ethereum')
   const [running, setRunning]         = useState(false)
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null)
   const [agentTimes, setAgentTimes]   = useState<Record<string, number>>({})
   const [report, setReport]           = useState<Report | null>(null)
   const [error, setError]             = useState<string | null>(null)
   const [elapsed, setElapsed]         = useState<number | null>(null)
+  const [copied, setCopied]           = useState(false)
+
+  const shareReport = () => {
+    if (!report) return
+    const url = `${window.location.origin}/report/${report.audit_id}`
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  const viewReport = () => {
+    if (!report) return
+    navigate(`/report/${report.audit_id}`)
+  }
 
   const startAudit = async () => {
-    if (!code.trim()) return
+    const isAddress = inputTab === 'address'
+    if (isAddress && !address.trim()) return
+    if (!isAddress && !code.trim()) return
+
     setRunning(true)
     setReport(null)
     setError(null)
@@ -56,11 +90,17 @@ export default function Audit() {
     let lastAgentStart = wallStart
 
     try {
-      const res = await fetch('/api/audit/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, language }),
-      })
+      let res: Response
+      if (isAddress) {
+        const params = new URLSearchParams({ address: address.trim(), network })
+        res = await fetch(`/api/audit/address?${params}`, { method: 'POST' })
+      } else {
+        res = await fetch('/api/audit/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, language }),
+        })
+      }
 
       if (!res.ok) {
         const text = await res.text()
@@ -150,7 +190,7 @@ export default function Audit() {
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
               <h1 className="text-lg font-bold text-white">Security Audit</h1>
-              <p className="text-xs text-argus-muted">Paste code and run the 4-agent pipeline</p>
+              <p className="text-xs text-argus-muted">Run the 4-agent pipeline on any smart contract</p>
             </div>
             {elapsed && (
               <span className="animate-fade-in text-xs text-argus-muted">
@@ -159,23 +199,66 @@ export default function Audit() {
             )}
           </div>
 
+          {/* Input tab switcher */}
+          <div className="flex gap-1 p-1 bg-argus-panel border border-argus-border rounded-lg w-fit">
+            {(['paste', 'address'] as InputTab[]).map(tab => (
+              <button
+                key={tab}
+                onClick={() => !running && setInputTab(tab)}
+                disabled={running}
+                className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all duration-150 disabled:opacity-40
+                  ${inputTab === tab
+                    ? 'bg-blue-600 text-white shadow'
+                    : 'text-argus-muted hover:text-white'}`}
+              >
+                {tab === 'paste' ? '📋 Paste Code' : '🔗 Contract Address'}
+              </button>
+            ))}
+          </div>
+
           {/* Controls */}
           <div className="flex items-center gap-3 flex-wrap">
-            <select
-              value={language}
-              onChange={e => setLanguage(e.target.value)}
-              disabled={running}
-              className="bg-argus-panel border border-argus-border text-white text-sm rounded-lg px-3 py-2 outline-none
-                focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 disabled:opacity-50 transition-colors"
-            >
-              {LANGUAGES.map(l => (
-                <option key={l} value={l}>{l}</option>
-              ))}
-            </select>
+            {inputTab === 'paste' ? (
+              <select
+                value={language}
+                onChange={e => setLanguage(e.target.value)}
+                disabled={running}
+                className="bg-argus-panel border border-argus-border text-white text-sm rounded-lg px-3 py-2 outline-none
+                  focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 disabled:opacity-50 transition-colors"
+              >
+                {LANGUAGES.map(l => (
+                  <option key={l} value={l}>{l}</option>
+                ))}
+              </select>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  value={address}
+                  onChange={e => setAddress(e.target.value)}
+                  placeholder="0x… contract address"
+                  disabled={running}
+                  className="bg-argus-panel border border-argus-border text-white text-sm rounded-lg px-3 py-2 outline-none
+                    focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 disabled:opacity-50 transition-colors
+                    placeholder:text-argus-muted/50 font-mono w-72"
+                />
+                <select
+                  value={network}
+                  onChange={e => setNetwork(e.target.value)}
+                  disabled={running}
+                  className="bg-argus-panel border border-argus-border text-white text-sm rounded-lg px-3 py-2 outline-none
+                    focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 disabled:opacity-50 transition-colors"
+                >
+                  {NETWORKS.map(n => (
+                    <option key={n.value} value={n.value}>{n.label}</option>
+                  ))}
+                </select>
+              </>
+            )}
 
             <button
               onClick={running ? undefined : startAudit}
-              disabled={running || !code.trim()}
+              disabled={running || (inputTab === 'paste' ? !code.trim() : !address.trim())}
               className={`relative flex items-center gap-2 px-5 py-2 rounded-lg font-semibold text-sm transition-all duration-200
                 disabled:opacity-40 disabled:cursor-not-allowed overflow-hidden
                 ${running
@@ -196,13 +279,29 @@ export default function Audit() {
             </button>
 
             {report && !running && (
-              <button
-                onClick={downloadReport}
-                className="animate-fade-in flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-argus-muted
-                  border border-argus-border hover:border-blue-500/50 hover:text-blue-400 hover:bg-blue-900/10 transition-all"
-              >
-                ↓ Download Report
-              </button>
+              <>
+                <button
+                  onClick={downloadReport}
+                  className="animate-fade-in flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-argus-muted
+                    border border-argus-border hover:border-blue-500/50 hover:text-blue-400 hover:bg-blue-900/10 transition-all"
+                >
+                  ↓ Download Report
+                </button>
+                <button
+                  onClick={shareReport}
+                  className="animate-fade-in flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-argus-muted
+                    border border-argus-border hover:border-green-500/50 hover:text-green-400 hover:bg-green-900/10 transition-all"
+                >
+                  {copied ? '✓ Copied!' : '🔗 Share'}
+                </button>
+                <button
+                  onClick={viewReport}
+                  className="animate-fade-in flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-argus-muted
+                    border border-argus-border hover:border-purple-500/50 hover:text-purple-400 hover:bg-purple-900/10 transition-all"
+                >
+                  ↗ View Report
+                </button>
+              </>
             )}
 
             {(report || error) && !running && (
@@ -216,13 +315,20 @@ export default function Audit() {
             )}
           </div>
 
-          {/* Code editor */}
-          <CodeEditor
-            value={code}
-            onChange={setCode}
-            language={language}
-            disabled={running}
-          />
+          {/* Input area */}
+          {inputTab === 'paste' ? (
+            <CodeEditor
+              value={code}
+              onChange={setCode}
+              language={language}
+              disabled={running}
+            />
+          ) : (
+            <div className="rounded-xl border border-argus-border bg-argus-panel p-5 text-sm text-argus-muted space-y-2">
+              <p>Enter a verified contract address above. Argus will fetch its source code from the block explorer and run the full audit pipeline.</p>
+              <p className="text-xs text-argus-muted/60">Only verified contracts (source published on Etherscan/Basescan/etc.) can be audited.</p>
+            </div>
+          )}
 
           {/* Error */}
           {error && (
