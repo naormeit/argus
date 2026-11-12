@@ -32,7 +32,7 @@ function RiskBadge({ risk }: { risk: string | null }) {
   )
 }
 
-function SourceLabel({ type, ref: sourceRef, network }: { type: string; ref: string | null; network: string | null }) {
+function SourceLabel({ type, ref: sourceRef }: { type: string; ref: string | null; network: string | null }) {
   if (type === 'address' && sourceRef) {
     return <span className="font-mono text-xs text-lux-ice/50">{sourceRef.slice(0, 10)}…</span>
   }
