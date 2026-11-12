@@ -21,6 +21,7 @@ from config import DATABASE_URL
 from models import AuditRequest, AuditStatus, AuditReport, AuditListItem
 from pipeline import ArgusPipeline
 from etherscan import fetch_contract_source, ContractNotVerified, ExplorerError
+from github_fetcher import fetch_github_source, GitHubFetchError
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -152,6 +153,25 @@ async def audit_address(address: str, network: str = "ethereum"):
         source_type="address",
         source_ref=address,
         network=network,
+    )
+    return _make_stream(req)
+
+
+@app.post("/audit/github")
+async def audit_github(url: str):
+    """Fetch .sol source from a GitHub URL, then stream the audit."""
+    try:
+        source, label = await fetch_github_source(url)
+    except GitHubFetchError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"GitHub fetch failed: {e}")
+
+    req = AuditRequest(
+        code=source,
+        language="solidity",
+        source_type="github",
+        source_ref=url,
     )
     return _make_stream(req)
 

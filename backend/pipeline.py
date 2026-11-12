@@ -52,9 +52,21 @@ class ArgusPipeline:
                                               current_agent="scout", progress=0)
 
         try:
+            # ── Static scan (Solidity only, best-effort) ─────────────────────
+            static_findings = []
+            if language == "solidity":
+                try:
+                    from static_scanner import scan_solidity
+                    static_findings = scan_solidity(code)
+                    if static_findings:
+                        log.info(f"[Pipeline] Static scan: {len(static_findings)} pattern(s).")
+                except Exception as scan_err:
+                    log.warning(f"[Pipeline] Static scan skipped: {scan_err}")
+
             # ── Scout ────────────────────────────────────────────────────────
             await _emit("scout", 5)
-            surface, env1 = await self.scout.run(code, language, transfer_id)
+            surface, env1 = await self.scout.run(code, language, transfer_id,
+                                                 static_findings=static_findings)
             log.info(f"[Pipeline] Scout done — {len(surface.suspicious_patterns)} pattern(s).")
 
             # ── Hunter ───────────────────────────────────────────────────────

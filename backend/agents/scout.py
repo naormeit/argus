@@ -48,14 +48,31 @@ class ScoutAgent(BaseAgent):
             self._client = AsyncOpenAI(api_key=META_API_KEY, base_url=META_API_BASE_URL)
         return self._client
 
-    async def run(self, code: str, language: str, transfer_id: str) -> tuple[AttackSurface, dict]:
+    async def run(self, code: str, language: str, transfer_id: str,
+                  static_findings: list | None = None) -> tuple[AttackSurface, dict]:
         log.info(f"[Scout] Mapping attack surface — audit {transfer_id}")
+
+        static_ctx = ""
+        if static_findings:
+            rows = "\n".join(
+                f"  [{f.severity.upper()}] {f.detector}: {f.description} (lines {f.lines})"
+                for f in static_findings
+            )
+            static_ctx = (
+                f"Pre-scan static analysis found {len(static_findings)} pattern(s):\n{rows}\n\n"
+                "Factor these into your analysis and confirm or dismiss each one.\n\n"
+            )
+
+        user_msg = (
+            f"{static_ctx}Language: {language}\n\n"
+            f"```{language}\n{code}\n```\n\nReturn only valid JSON."
+        )
 
         resp = await self.client.chat.completions.create(
             model=MUSE_SPARK_MODEL,
             messages=[
                 {"role": "system", "content": _SYSTEM},
-                {"role": "user",   "content": f"Language: {language}\n\n```{language}\n{code}\n```\n\nReturn only valid JSON."},
+                {"role": "user",   "content": user_msg},
             ],
             temperature=0.1,
             max_tokens=2048,

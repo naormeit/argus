@@ -41,7 +41,7 @@ contract VulnerableBank {
     }
 }`
 
-type InputTab = 'paste' | 'address'
+type InputTab = 'paste' | 'address' | 'github'
 
 export default function Audit() {
   const navigate = useNavigate()
@@ -51,6 +51,7 @@ export default function Audit() {
   const [language, setLanguage]       = useState('solidity')
   const [address, setAddress]         = useState('')
   const [network, setNetwork]         = useState('ethereum')
+  const [githubUrl, setGithubUrl]     = useState('')
   const [running, setRunning]         = useState(false)
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null)
   const [agentTimes, setAgentTimes]   = useState<Record<string, number>>({})
@@ -75,8 +76,10 @@ export default function Audit() {
 
   const startAudit = async () => {
     const isAddress = inputTab === 'address'
+    const isGithub  = inputTab === 'github'
     if (isAddress && !address.trim()) return
-    if (!isAddress && !code.trim()) return
+    if (isGithub  && !githubUrl.trim()) return
+    if (!isAddress && !isGithub && !code.trim()) return
 
     setRunning(true)
     setReport(null)
@@ -94,6 +97,9 @@ export default function Audit() {
       if (isAddress) {
         const params = new URLSearchParams({ address: address.trim(), network })
         res = await fetch(`/api/audit/address?${params}`, { method: 'POST' })
+      } else if (isGithub) {
+        const params = new URLSearchParams({ url: githubUrl.trim() })
+        res = await fetch(`/api/audit/github?${params}`, { method: 'POST' })
       } else {
         res = await fetch('/api/audit/stream', {
           method: 'POST',
@@ -201,17 +207,21 @@ export default function Audit() {
 
           {/* Input tab switcher */}
           <div className="flex gap-1 p-1 bg-argus-panel border border-argus-border rounded-lg w-fit">
-            {(['paste', 'address'] as InputTab[]).map(tab => (
+            {([
+              { id: 'paste',   label: '📋 Paste Code' },
+              { id: 'address', label: '🔗 Contract Address' },
+              { id: 'github',  label: '🐙 GitHub URL' },
+            ] as { id: InputTab; label: string }[]).map(({ id, label }) => (
               <button
-                key={tab}
-                onClick={() => !running && setInputTab(tab)}
+                key={id}
+                onClick={() => !running && setInputTab(id)}
                 disabled={running}
                 className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all duration-150 disabled:opacity-40
-                  ${inputTab === tab
+                  ${inputTab === id
                     ? 'bg-blue-600 text-white shadow'
                     : 'text-argus-muted hover:text-white'}`}
               >
-                {tab === 'paste' ? '📋 Paste Code' : '🔗 Contract Address'}
+                {label}
               </button>
             ))}
           </div>
@@ -230,7 +240,7 @@ export default function Audit() {
                   <option key={l} value={l}>{l}</option>
                 ))}
               </select>
-            ) : (
+            ) : inputTab === 'address' ? (
               <>
                 <input
                   type="text"
@@ -254,11 +264,11 @@ export default function Audit() {
                   ))}
                 </select>
               </>
-            )}
+            ) : null /* GitHub URL is in the input area below */}
 
             <button
               onClick={running ? undefined : startAudit}
-              disabled={running || (inputTab === 'paste' ? !code.trim() : !address.trim())}
+              disabled={running || (inputTab === 'paste' ? !code.trim() : inputTab === 'address' ? !address.trim() : !githubUrl.trim())}
               className={`relative flex items-center gap-2 px-5 py-2 rounded-lg font-semibold text-sm transition-all duration-200
                 disabled:opacity-40 disabled:cursor-not-allowed overflow-hidden
                 ${running
@@ -323,10 +333,32 @@ export default function Audit() {
               language={language}
               disabled={running}
             />
-          ) : (
+          ) : inputTab === 'address' ? (
             <div className="rounded-xl border border-argus-border bg-argus-panel p-5 text-sm text-argus-muted space-y-2">
               <p>Enter a verified contract address above. Argus will fetch its source code from the block explorer and run the full audit pipeline.</p>
               <p className="text-xs text-argus-muted/60">Only verified contracts (source published on Etherscan/Basescan/etc.) can be audited.</p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-argus-border bg-argus-panel p-5 space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-argus-muted uppercase tracking-wider">GitHub URL</label>
+                <input
+                  type="url"
+                  value={githubUrl}
+                  onChange={e => setGithubUrl(e.target.value)}
+                  placeholder="https://github.com/owner/repo/blob/main/contracts/Token.sol"
+                  disabled={running}
+                  className="w-full bg-black/40 border border-argus-border text-white text-sm rounded-lg px-3 py-2.5 outline-none
+                    focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 disabled:opacity-50 transition-colors
+                    placeholder:text-argus-muted/40 font-mono"
+                />
+              </div>
+              <div className="text-xs text-argus-muted/70 space-y-1">
+                <p className="font-semibold text-argus-muted">Supported URL formats:</p>
+                <p>• Single file — <span className="font-mono">github.com/owner/repo/blob/main/contracts/Token.sol</span></p>
+                <p>• Directory  — <span className="font-mono">github.com/owner/repo/tree/main/contracts</span></p>
+                <p>• Repo root  — <span className="font-mono">github.com/owner/repo</span></p>
+              </div>
             </div>
           )}
 
