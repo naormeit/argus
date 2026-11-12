@@ -26,7 +26,9 @@ export default {
         },
       },
       fontFamily: {
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+        display: ['Syne', 'sans-serif'],
+        sans:    ['DM Sans', 'system-ui', 'sans-serif'],
+        mono:    ['JetBrains Mono', 'Fira Code', 'monospace'],
       },
     },
   },

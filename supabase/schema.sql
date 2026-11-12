@@ -21,3 +21,8 @@ CREATE INDEX IF NOT EXISTS audits_created_at_idx ON audits (created_at DESC);
 
 -- Index for address lookups
 CREATE INDEX IF NOT EXISTS audits_source_ref_idx ON audits (source_ref) WHERE source_ref IS NOT NULL;
+
+-- Phase 3: user accounts
+-- Run this migration in Supabase SQL Editor after enabling Auth
+ALTER TABLE audits ADD COLUMN IF NOT EXISTS user_id UUID;
+CREATE INDEX IF NOT EXISTS audits_user_id_idx ON audits (user_id) WHERE user_id IS NOT NULL;

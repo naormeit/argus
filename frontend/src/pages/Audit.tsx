@@ -4,6 +4,7 @@ import CodeEditor from '../components/CodeEditor'
 import AgentTimeline from '../components/AgentTimeline'
 import AuditReport from '../components/AuditReport'
 import { AgentStatus, AuditReport as Report } from '../types'
+import { useAuth } from '../context/AuthContext'
 
 const LANGUAGES = ['solidity', 'python', 'javascript', 'typescript', 'rust', 'go']
 
@@ -45,6 +46,7 @@ type InputTab = 'paste' | 'address' | 'github'
 
 export default function Audit() {
   const navigate = useNavigate()
+  const { session } = useAuth()
 
   const [inputTab, setInputTab]       = useState<InputTab>('paste')
   const [code, setCode]               = useState(VULNERABLE_BANK)
@@ -93,17 +95,21 @@ export default function Audit() {
     let lastAgentStart = wallStart
 
     try {
+      const authHeader: Record<string, string> = session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {}
+
       let res: Response
       if (isAddress) {
         const params = new URLSearchParams({ address: address.trim(), network })
-        res = await fetch(`/api/audit/address?${params}`, { method: 'POST' })
+        res = await fetch(`/api/audit/address?${params}`, { method: 'POST', headers: authHeader })
       } else if (isGithub) {
         const params = new URLSearchParams({ url: githubUrl.trim() })
-        res = await fetch(`/api/audit/github?${params}`, { method: 'POST' })
+        res = await fetch(`/api/audit/github?${params}`, { method: 'POST', headers: authHeader })
       } else {
         res = await fetch('/api/audit/stream', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeader },
           body: JSON.stringify({ code, language }),
         })
       }

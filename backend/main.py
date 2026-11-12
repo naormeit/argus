@@ -13,7 +13,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -22,6 +22,7 @@ from models import AuditRequest, AuditStatus, AuditReport, AuditListItem
 from pipeline import ArgusPipeline
 from etherscan import fetch_contract_source, ContractNotVerified, ExplorerError
 from github_fetcher import fetch_github_source, GitHubFetchError
+from auth import verify_supabase_token
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ pipeline = ArgusPipeline()
 # DB is optional — gracefully disabled if DATABASE_URL is not set
 _db_enabled = bool(DATABASE_URL)
 if _db_enabled:
-    from database import get_pool, close_pool, save_audit, get_audit, list_audits
+    from database import get_pool, close_pool, save_audit, get_audit, list_audits, list_audits_for_user
 
 
 @asynccontextmanager
@@ -69,9 +70,18 @@ app.add_middleware(
 )
 
 
+# ── Auth dependency ──────────────────────────────────────────────────────────
+
+def _get_user_id(request: Request) -> str | None:
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    return verify_supabase_token(auth[7:])
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _make_stream(req: AuditRequest):
+def _make_stream(req: AuditRequest, user_id: str | None = None):
     """Return an SSE StreamingResponse that runs the pipeline and persists the result."""
     audit_id = req.audit_id or str(uuid.uuid4())
     queue: asyncio.Queue[AuditStatus | None] = asyncio.Queue()
@@ -93,6 +103,7 @@ def _make_stream(req: AuditRequest):
                         source_type=req.source_type,
                         source_ref=req.source_ref,
                         network=req.network,
+                        user_id=user_id,
                     )
                 except Exception as db_err:
                     log.warning(f"Failed to persist audit {audit_id}: {db_err}")
@@ -130,13 +141,13 @@ async def health():
 
 
 @app.post("/audit/stream")
-async def stream_audit(req: AuditRequest):
+async def stream_audit(req: AuditRequest, request: Request):
     """Stream a code-paste audit via SSE."""
-    return _make_stream(req)
+    return _make_stream(req, user_id=_get_user_id(request))
 
 
 @app.post("/audit/address")
-async def audit_address(address: str, network: str = "ethereum"):
+async def audit_address(address: str, network: str = "ethereum", request: Request = None):
     """Fetch verified source from a block explorer, then stream the audit."""
     try:
         source, contract_name = await fetch_contract_source(address, network)
@@ -154,11 +165,11 @@ async def audit_address(address: str, network: str = "ethereum"):
         source_ref=address,
         network=network,
     )
-    return _make_stream(req)
+    return _make_stream(req, user_id=_get_user_id(request) if request else None)
 
 
 @app.post("/audit/github")
-async def audit_github(url: str):
+async def audit_github(url: str, request: Request = None):
     """Fetch .sol source from a GitHub URL, then stream the audit."""
     try:
         source, label = await fetch_github_source(url)
@@ -173,7 +184,7 @@ async def audit_github(url: str):
         source_type="github",
         source_ref=url,
     )
-    return _make_stream(req)
+    return _make_stream(req, user_id=_get_user_id(request) if request else None)
 
 
 @app.get("/report/{audit_id}", response_model=AuditReport)
@@ -193,6 +204,31 @@ async def recent_reports(limit: int = 20):
     if not _db_enabled:
         return []
     rows = await list_audits(min(limit, 100))
+    return [
+        AuditListItem(
+            id=str(r["id"]),
+            created_at=r["created_at"].isoformat(),
+            language=r["language"],
+            source_type=r["source_type"],
+            source_ref=r.get("source_ref"),
+            network=r.get("network"),
+            overall_risk=r.get("overall_risk"),
+            findings_count=r.get("findings_count", 0),
+            summary=r.get("summary"),
+        )
+        for r in rows
+    ]
+
+
+@app.get("/audits/me", response_model=list[AuditListItem])
+async def my_audits(limit: int = 50, request: Request = None):
+    """List the authenticated user's own audits."""
+    user_id = _get_user_id(request) if request else None
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    if not _db_enabled:
+        return []
+    rows = await list_audits_for_user(user_id, min(limit, 100))
     return [
         AuditListItem(
             id=str(r["id"]),

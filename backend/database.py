@@ -31,15 +31,16 @@ async def close_pool():
 
 async def save_audit(report_dict: dict, source_code: str, language: str,
                      source_type: str = "paste", source_ref: str | None = None,
-                     network: str | None = None) -> None:
+                     network: str | None = None,
+                     user_id: str | None = None) -> None:
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute(
             """
             INSERT INTO audits
               (id, language, source_code, source_type, source_ref, network,
-               overall_risk, findings_count, summary, signature, report)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+               overall_risk, findings_count, summary, signature, report, user_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             ON CONFLICT (id) DO NOTHING
             """,
             report_dict["audit_id"],
@@ -53,6 +54,7 @@ async def save_audit(report_dict: dict, source_code: str, language: str,
             report_dict.get("summary"),
             report_dict.get("signature"),
             json.dumps(report_dict),
+            user_id,
         )
 
 
@@ -79,5 +81,22 @@ async def list_audits(limit: int = 20) -> list[dict]:
             LIMIT $1
             """,
             limit,
+        )
+        return [dict(r) for r in rows]
+
+
+async def list_audits_for_user(user_id: str, limit: int = 50) -> list[dict]:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, created_at, language, source_type, source_ref,
+                   network, overall_risk, findings_count, summary
+            FROM audits
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+            LIMIT $2
+            """,
+            user_id, limit,
         )
         return [dict(r) for r in rows]

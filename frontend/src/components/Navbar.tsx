@@ -1,4 +1,5 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 
 function IconArrow() {
   return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -9,6 +10,17 @@ function IconGithub() {
 
 export default function Navbar() {
   const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const { user, signOut } = useAuth()
+
+  const handleSignOut = async () => {
+    await signOut()
+    navigate('/')
+  }
+
+  const truncatedEmail = user?.email
+    ? user.email.length > 22 ? user.email.slice(0, 20) + '…' : user.email
+    : null
 
   return (
     <header className="sticky top-0 z-50 border-b border-lux-white/6 bg-lux-black/85 backdrop-blur-xl">
@@ -18,16 +30,17 @@ export default function Navbar() {
           <div className="w-7 h-7 rounded-lg border border-lux-gold/30 bg-lux-gold/8
             flex items-center justify-center
             group-hover:border-lux-gold/50 group-hover:bg-lux-gold/15 transition-all">
-            <span className="text-[11px] font-bold text-lux-gold">A</span>
+            <span className="text-[11px] font-bold font-display text-lux-gold">A</span>
           </div>
-          <span className="text-sm font-semibold text-lux-white tracking-tight">Argus</span>
+          <span className="text-sm font-bold font-display text-lux-white tracking-tight">Argus</span>
         </Link>
 
         {/* Nav */}
         <nav className="hidden md:flex items-center gap-0.5">
           {[
-            { to: '/',      label: 'Home'  },
-            { to: '/audit', label: 'Audit' },
+            { to: '/',          label: 'Home'      },
+            { to: '/audit',     label: 'Audit'     },
+            ...(user ? [{ to: '/dashboard', label: 'Dashboard' }] : []),
           ].map(({ to, label }) => (
             <Link
               key={to}
@@ -51,15 +64,37 @@ export default function Navbar() {
           </a>
         </nav>
 
-        {/* CTA */}
-        <Link
-          to="/audit"
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg
-            bg-lux-gold text-lux-black font-semibold text-sm
-            hover:bg-lux-gold/90 transition-colors shadow-md shadow-lux-gold/20"
-        >
-          Run Audit <IconArrow />
-        </Link>
+        {/* Right side */}
+        {user ? (
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:block text-xs text-lux-ice/40 max-w-[160px] truncate">{truncatedEmail}</span>
+            <button
+              onClick={handleSignOut}
+              className="px-3 py-1.5 rounded-lg border border-lux-white/10 text-xs text-lux-ice/50
+                hover:border-lux-white/20 hover:text-lux-white transition-colors"
+            >
+              Sign out
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Link
+              to="/login"
+              className="px-3 py-1.5 rounded-lg border border-lux-white/10 text-xs text-lux-ice/50
+                hover:border-lux-white/20 hover:text-lux-white transition-colors"
+            >
+              Sign in
+            </Link>
+            <Link
+              to="/audit"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg
+                bg-lux-gold text-lux-black font-semibold text-sm
+                hover:bg-lux-gold/90 transition-colors shadow-md shadow-lux-gold/20"
+            >
+              Run Audit <IconArrow />
+            </Link>
+          </div>
+        )}
       </div>
     </header>
   )

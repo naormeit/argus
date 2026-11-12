@@ -3,6 +3,7 @@
     { "source": "/api/audit/:path*",  "destination": "https://argus-backend-1ge3.onrender.com/audit/:path*" },
     { "source": "/api/report/:path*", "destination": "https://argus-backend-1ge3.onrender.com/report/:path*" },
     { "source": "/api/reports",       "destination": "https://argus-backend-1ge3.onrender.com/reports" },
+    { "source": "/api/audits/:path*", "destination": "https://argus-backend-1ge3.onrender.com/audits/:path*" },
     { "source": "/api/health",        "destination": "https://argus-backend-1ge3.onrender.com/health" },
     { "source": "/(.*)",              "destination": "/index.html" }
   ]

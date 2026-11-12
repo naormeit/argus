@@ -10,3 +10,4 @@ MUSE_CODE_MODEL    = os.getenv("MUSE_CODE_MODEL",  os.getenv("MODEL", "openai/gp
 LOOM_SECRET        = os.getenv("LOOM_SECRET", "argus-dev-secret-change-in-prod")
 DATABASE_URL       = os.getenv("DATABASE_URL", "")
 ETHERSCAN_API_KEY  = os.getenv("ETHERSCAN_API_KEY", "")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
