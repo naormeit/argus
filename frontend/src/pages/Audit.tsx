@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import CodeEditor from '../components/CodeEditor'
 import AgentTimeline from '../components/AgentTimeline'
 import AuditReport from '../components/AuditReport'
 import { AgentStatus, AuditReport as Report } from '../types'
 import { useAuth } from '../context/AuthContext'
+import { useCredits } from '../hooks/useCredits'
 
 const LANGUAGES = ['solidity', 'python', 'javascript', 'typescript', 'rust', 'go']
 
@@ -46,7 +47,8 @@ type InputTab = 'paste' | 'address' | 'github'
 
 export default function Audit() {
   const navigate = useNavigate()
-  const { session } = useAuth()
+  const { user, session, loading: authLoading } = useAuth()
+  const { info: creditsInfo, hasAccess } = useCredits()
 
   const [inputTab, setInputTab]       = useState<InputTab>('paste')
   const [code, setCode]               = useState(VULNERABLE_BANK)
@@ -187,6 +189,46 @@ export default function Audit() {
     a.download = `argus-report-${report.audit_id}.json`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  // Gate: not logged in
+  if (!authLoading && !user) {
+    return (
+      <div className="min-h-screen bg-lux-black text-lux-white flex items-center justify-center px-4">
+        <div className="text-center max-w-sm">
+          <div className="text-4xl mb-4">🔒</div>
+          <h2 className="text-lg font-bold text-white mb-2">Sign in to run audits</h2>
+          <p className="text-sm text-lux-ice/40 mb-6">Create a free account and get 3 audits instantly.</p>
+          <Link to="/login?next=/audit"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg
+              bg-lux-gold text-lux-black font-semibold text-sm
+              hover:bg-lux-gold/90 transition-colors shadow-md shadow-lux-gold/20">
+            Sign in / Sign up
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  // Gate: logged in but no credits
+  if (!authLoading && user && hasAccess === false) {
+    return (
+      <div className="min-h-screen bg-lux-black text-lux-white flex items-center justify-center px-4">
+        <div className="text-center max-w-sm">
+          <div className="text-4xl mb-4">⚡</div>
+          <h2 className="text-lg font-bold text-white mb-2">Out of credits</h2>
+          <p className="text-sm text-lux-ice/40 mb-6">
+            You've used all your audits. Top up to keep going.
+          </p>
+          <Link to="/pricing"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg
+              bg-lux-gold text-lux-black font-semibold text-sm
+              hover:bg-lux-gold/90 transition-colors shadow-md shadow-lux-gold/20">
+            Get more audits
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (

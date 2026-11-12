@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useCredits } from '../hooks/useCredits'
 
 function IconArrow() {
   return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -12,6 +13,7 @@ export default function Navbar() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { user, signOut } = useAuth()
+  const { info: creditsInfo } = useCredits()
 
   const handleSignOut = async () => {
     await signOut()
@@ -40,7 +42,7 @@ export default function Navbar() {
           {[
             { to: '/',          label: 'Home'      },
             { to: '/audit',     label: 'Audit'     },
-            ...(user ? [{ to: '/dashboard', label: 'Dashboard' }] : []),
+            ...(user ? [{ to: '/dashboard', label: 'Dashboard' }, { to: '/pricing', label: 'Pricing' }] : [{ to: '/pricing', label: 'Pricing' }]),
           ].map(({ to, label }) => (
             <Link
               key={to}
@@ -67,7 +69,22 @@ export default function Navbar() {
         {/* Right side */}
         {user ? (
           <div className="flex items-center gap-2">
-            <span className="hidden sm:block text-xs text-lux-ice/40 max-w-[160px] truncate">{truncatedEmail}</span>
+            {creditsInfo && (
+              creditsInfo.plan === 'pro' && creditsInfo.subscription_status === 'active' ? (
+                <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full
+                  text-[10px] font-bold uppercase tracking-wide border border-lux-gold/40 text-lux-gold/80 bg-lux-gold/5">
+                  Pro
+                </span>
+              ) : (
+                <Link to="/pricing"
+                  className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full
+                    text-[10px] font-semibold border border-lux-white/10 text-lux-ice/40
+                    hover:border-lux-gold/30 hover:text-lux-gold/70 transition-colors">
+                  {creditsInfo.credits} credit{creditsInfo.credits !== 1 ? 's' : ''}
+                </Link>
+              )
+            )}
+            <span className="hidden sm:block text-xs text-lux-ice/40 max-w-[140px] truncate">{truncatedEmail}</span>
             <button
               onClick={handleSignOut}
               className="px-3 py-1.5 rounded-lg border border-lux-white/10 text-xs text-lux-ice/50

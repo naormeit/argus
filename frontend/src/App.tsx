@@ -6,6 +6,8 @@ import Audit from './pages/Audit'
 import ReportPage from './pages/Report'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Pricing from './pages/Pricing'
+import Success from './pages/Success'
 
 export default function App() {
   return (
@@ -13,12 +15,14 @@ export default function App() {
       <AuthProvider>
         <Navbar />
         <Routes>
-          <Route path="/"          element={<Landing />} />
-          <Route path="/audit"     element={<Audit />} />
+          <Route path="/"           element={<Landing />} />
+          <Route path="/audit"      element={<Audit />} />
           <Route path="/report/:id" element={<ReportPage />} />
-          <Route path="/login"     element={<Login />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="*"          element={<Landing />} />
+          <Route path="/login"      element={<Login />} />
+          <Route path="/dashboard"  element={<Dashboard />} />
+          <Route path="/pricing"    element={<Pricing />} />
+          <Route path="/success"    element={<Success />} />
+          <Route path="*"           element={<Landing />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

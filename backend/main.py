@@ -17,12 +17,19 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from config import DATABASE_URL
+import stripe
+
+from config import (
+    DATABASE_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
+    STRIPE_CREDIT_PRICE_ID, STRIPE_PRO_PRICE_ID, FRONTEND_URL,
+)
 from models import AuditRequest, AuditStatus, AuditReport, AuditListItem
 from pipeline import ArgusPipeline
 from etherscan import fetch_contract_source, ContractNotVerified, ExplorerError
 from github_fetcher import fetch_github_source, GitHubFetchError
 from auth import verify_supabase_token
+
+stripe.api_key = STRIPE_SECRET_KEY
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -33,6 +40,11 @@ pipeline = ArgusPipeline()
 _db_enabled = bool(DATABASE_URL)
 if _db_enabled:
     from database import get_pool, close_pool, save_audit, get_audit, list_audits, list_audits_for_user
+    from billing import (
+        get_credits, has_audit_access, deduct_credit, add_credits,
+        activate_subscription, cancel_subscription_by_customer, update_subscription_status,
+        CREDITS_PER_PACK,
+    )
 
 
 @asynccontextmanager
@@ -105,6 +117,8 @@ def _make_stream(req: AuditRequest, user_id: str | None = None):
                         network=req.network,
                         user_id=user_id,
                     )
+                    if user_id:
+                        await deduct_credit(user_id)
                 except Exception as db_err:
                     log.warning(f"Failed to persist audit {audit_id}: {db_err}")
         except Exception:
@@ -140,15 +154,27 @@ async def health():
     return {"status": "ok", "service": "argus", "db": _db_enabled}
 
 
+async def _require_credits(request: Request) -> str:
+    """Dependency: require a valid JWT and available audit credits. Returns user_id."""
+    user_id = _get_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    if _db_enabled and not await has_audit_access(user_id):
+        raise HTTPException(status_code=402, detail="No credits remaining. Please top up.")
+    return user_id
+
+
 @app.post("/audit/stream")
 async def stream_audit(req: AuditRequest, request: Request):
     """Stream a code-paste audit via SSE."""
-    return _make_stream(req, user_id=_get_user_id(request))
+    user_id = await _require_credits(request)
+    return _make_stream(req, user_id=user_id)
 
 
 @app.post("/audit/address")
 async def audit_address(address: str, network: str = "ethereum", request: Request = None):
     """Fetch verified source from a block explorer, then stream the audit."""
+    user_id = await _require_credits(request)
     try:
         source, contract_name = await fetch_contract_source(address, network)
     except ContractNotVerified as e:
@@ -165,12 +191,13 @@ async def audit_address(address: str, network: str = "ethereum", request: Reques
         source_ref=address,
         network=network,
     )
-    return _make_stream(req, user_id=_get_user_id(request) if request else None)
+    return _make_stream(req, user_id=user_id)
 
 
 @app.post("/audit/github")
 async def audit_github(url: str, request: Request = None):
     """Fetch .sol source from a GitHub URL, then stream the audit."""
+    user_id = await _require_credits(request)
     try:
         source, label = await fetch_github_source(url)
     except GitHubFetchError as e:
@@ -184,7 +211,7 @@ async def audit_github(url: str, request: Request = None):
         source_type="github",
         source_ref=url,
     )
-    return _make_stream(req, user_id=_get_user_id(request) if request else None)
+    return _make_stream(req, user_id=user_id)
 
 
 @app.get("/report/{audit_id}", response_model=AuditReport)
@@ -243,3 +270,107 @@ async def my_audits(limit: int = 50, request: Request = None):
         )
         for r in rows
     ]
+
+
+# ── Billing ───────────────────────────────────────────────────────────────────
+
+@app.get("/me")
+async def me(request: Request):
+    """Return the current user's credit balance and plan."""
+    user_id = _get_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    if not _db_enabled:
+        return {"credits": 0, "plan": "free", "subscription_status": None}
+    info = await get_credits(user_id)
+    return {
+        "credits": info["credits"],
+        "plan": info["plan"],
+        "subscription_status": info.get("subscription_status"),
+    }
+
+
+@app.post("/checkout/credits")
+async def checkout_credits(request: Request):
+    """Create a Stripe Checkout session for the 10-audit credit pack ($9.99)."""
+    user_id = _get_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    if not STRIPE_SECRET_KEY or not STRIPE_CREDIT_PRICE_ID:
+        raise HTTPException(status_code=503, detail="Billing not configured.")
+    body = await request.json()
+    email = body.get("email", "")
+    session = stripe.checkout.Session.create(
+        mode="payment",
+        line_items=[{"price": STRIPE_CREDIT_PRICE_ID, "quantity": 1}],
+        client_reference_id=user_id,
+        customer_email=email or None,
+        success_url=f"{FRONTEND_URL}/success?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{FRONTEND_URL}/pricing",
+    )
+    return {"url": session.url}
+
+
+@app.post("/checkout/subscribe")
+async def checkout_subscribe(request: Request):
+    """Create a Stripe Checkout session for the Pro subscription ($29/month)."""
+    user_id = _get_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    if not STRIPE_SECRET_KEY or not STRIPE_PRO_PRICE_ID:
+        raise HTTPException(status_code=503, detail="Billing not configured.")
+    body = await request.json()
+    email = body.get("email", "")
+    session = stripe.checkout.Session.create(
+        mode="subscription",
+        line_items=[{"price": STRIPE_PRO_PRICE_ID, "quantity": 1}],
+        client_reference_id=user_id,
+        customer_email=email or None,
+        success_url=f"{FRONTEND_URL}/success?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{FRONTEND_URL}/pricing",
+    )
+    return {"url": session.url}
+
+
+@app.post("/webhooks/stripe")
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhook events."""
+    if not STRIPE_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook secret not configured.")
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature", "")
+    try:
+        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid Stripe signature.")
+
+    if not _db_enabled:
+        return {"received": True}
+
+    etype = event["type"]
+    data = event["data"]["object"]
+
+    if etype == "checkout.session.completed":
+        user_id = data.get("client_reference_id")
+        customer_id = data.get("customer")
+        if not user_id:
+            return {"received": True}
+        if data.get("mode") == "payment":
+            await add_credits(user_id, CREDITS_PER_PACK)
+            log.info("Added %d credits to user %s", CREDITS_PER_PACK, user_id)
+        elif data.get("mode") == "subscription":
+            sub_id = data.get("subscription")
+            await activate_subscription(user_id, sub_id, customer_id)
+            log.info("Activated Pro subscription for user %s", user_id)
+
+    elif etype in ("customer.subscription.deleted",):
+        customer_id = data.get("customer")
+        await cancel_subscription_by_customer(customer_id)
+        log.info("Cancelled subscription for customer %s", customer_id)
+
+    elif etype in ("customer.subscription.updated",):
+        customer_id = data.get("customer")
+        status = data.get("status", "canceled")
+        await update_subscription_status(customer_id, status)
+
+    return {"received": True}
