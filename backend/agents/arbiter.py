@@ -6,8 +6,8 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timezone
-import anthropic
-from config import ANTHROPIC_API_KEY, CLAUDE_SMART_MODEL
+from openai import AsyncOpenAI
+from config import GROQ_API_KEY, GROQ_API_BASE, GROQ_SMART_MODEL
 from models import AttackSurface, ProofOfConcept, AuditReport, Finding, Severity
 from agents.base import BaseAgent
 from signing import ArgusLedger
@@ -44,12 +44,12 @@ _SEVERITY_ORDER = {
 class ArbiterAgent(BaseAgent):
     def __init__(self, ledger: ArgusLedger):
         super().__init__("arbiter", ledger)
-        self._client: anthropic.AsyncAnthropic | None = None
+        self._client: AsyncOpenAI | None = None
 
     @property
-    def client(self) -> anthropic.AsyncAnthropic:
+    def client(self) -> AsyncOpenAI:
         if self._client is None:
-            self._client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+            self._client = AsyncOpenAI(api_key=GROQ_API_KEY, base_url=GROQ_API_BASE)
         return self._client
 
     async def run(
@@ -72,17 +72,16 @@ class ArbiterAgent(BaseAgent):
             "proofs_of_concept": pocs_raw,
         }
 
-        resp = await self.client.messages.create(
-            model=CLAUDE_SMART_MODEL,
+        resp = await self.client.chat.completions.create(
+            model=GROQ_SMART_MODEL,
             max_tokens=3000,
-            system=_SYSTEM,
-            messages=[{
-                "role": "user",
-                "content": f"Audit context:\n{json.dumps(context, indent=2)}\n\nReturn only valid JSON."
-            }],
+            messages=[
+                {"role": "system", "content": _SYSTEM},
+                {"role": "user",   "content": f"Audit context:\n{json.dumps(context, indent=2)}\n\nReturn only valid JSON."},
+            ],
         )
 
-        raw   = resp.content[0].text if resp.content else ""
+        raw   = resp.choices[0].message.content or ""
         data  = self._parse_obj(raw, "Arbiter")
 
         findings: list[Finding] = []

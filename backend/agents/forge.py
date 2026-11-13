@@ -4,8 +4,8 @@ Third agent. Takes Hunter's exploit paths and generates runnable proof-of-concep
 """
 import json
 import logging
-import anthropic
-from config import ANTHROPIC_API_KEY, CLAUDE_MODEL
+from openai import AsyncOpenAI
+from config import GROQ_API_KEY, GROQ_API_BASE, GROQ_FAST_MODEL
 from models import ExploitPath, ProofOfConcept
 from agents.base import BaseAgent
 from signing import ArgusLedger
@@ -34,12 +34,12 @@ Be precise, not generic."""
 class ForgeAgent(BaseAgent):
     def __init__(self, ledger: ArgusLedger):
         super().__init__("forge", ledger)
-        self._client: anthropic.AsyncAnthropic | None = None
+        self._client: AsyncOpenAI | None = None
 
     @property
-    def client(self) -> anthropic.AsyncAnthropic:
+    def client(self) -> AsyncOpenAI:
         if self._client is None:
-            self._client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+            self._client = AsyncOpenAI(api_key=GROQ_API_KEY, base_url=GROQ_API_BASE)
         return self._client
 
     async def run(self, paths: list[ExploitPath], envelope: dict, transfer_id: str) -> tuple[list[ProofOfConcept], dict]:
@@ -54,17 +54,16 @@ class ForgeAgent(BaseAgent):
 
         paths_json = json.dumps(paths_raw, indent=2)
 
-        resp = await self.client.messages.create(
-            model=CLAUDE_MODEL,
+        resp = await self.client.chat.completions.create(
+            model=GROQ_FAST_MODEL,
             max_tokens=4096,
-            system=_SYSTEM,
-            messages=[{
-                "role": "user",
-                "content": f"Exploit paths to implement:\n{paths_json}\n\nReturn only valid JSON array."
-            }],
+            messages=[
+                {"role": "system", "content": _SYSTEM},
+                {"role": "user",   "content": f"Exploit paths to implement:\n{paths_json}\n\nReturn only valid JSON array."},
+            ],
         )
 
-        raw   = resp.content[0].text if resp.content else ""
+        raw   = resp.choices[0].message.content or ""
         items = self._parse_arr(raw, "Forge")
 
         pocs: list[ProofOfConcept] = []

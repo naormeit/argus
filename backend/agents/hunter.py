@@ -4,8 +4,8 @@ Second agent. Takes Scout's attack surface and reasons through full exploit chai
 """
 import json
 import logging
-import anthropic
-from config import ANTHROPIC_API_KEY, CLAUDE_SMART_MODEL
+from openai import AsyncOpenAI
+from config import GROQ_API_KEY, GROQ_API_BASE, GROQ_SMART_MODEL
 from models import AttackSurface, ExploitPath, Severity
 from agents.base import BaseAgent
 from signing import ArgusLedger
@@ -40,12 +40,12 @@ Only include patterns that are genuinely exploitable."""
 class HunterAgent(BaseAgent):
     def __init__(self, ledger: ArgusLedger):
         super().__init__("hunter", ledger)
-        self._client: anthropic.AsyncAnthropic | None = None
+        self._client: AsyncOpenAI | None = None
 
     @property
-    def client(self) -> anthropic.AsyncAnthropic:
+    def client(self) -> AsyncOpenAI:
         if self._client is None:
-            self._client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+            self._client = AsyncOpenAI(api_key=GROQ_API_KEY, base_url=GROQ_API_BASE)
         return self._client
 
     async def run(self, surface: AttackSurface, envelope: dict, transfer_id: str) -> tuple[list[ExploitPath], dict]:
@@ -59,17 +59,16 @@ class HunterAgent(BaseAgent):
 
         patterns_json = json.dumps([p.model_dump() for p in surface.suspicious_patterns], indent=2)
 
-        resp = await self.client.messages.create(
-            model=CLAUDE_SMART_MODEL,
+        resp = await self.client.chat.completions.create(
+            model=GROQ_SMART_MODEL,
             max_tokens=3000,
-            system=_SYSTEM,
-            messages=[{
-                "role": "user",
-                "content": f"Suspicious patterns to reason about:\n{patterns_json}\n\nReturn only valid JSON array."
-            }],
+            messages=[
+                {"role": "system", "content": _SYSTEM},
+                {"role": "user",   "content": f"Suspicious patterns to reason about:\n{patterns_json}\n\nReturn only valid JSON array."},
+            ],
         )
 
-        raw   = resp.content[0].text if resp.content else ""
+        raw   = resp.choices[0].message.content or ""
         items = self._parse_arr(raw, "Hunter")
 
         paths: list[ExploitPath] = []
