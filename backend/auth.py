@@ -40,7 +40,7 @@ def _decode(token: str) -> dict | None:
             options={"verify_aud": False},
         )
     except Exception as e:
-        log.warning("JWKS verification failed: %s", e)
+        log.debug("JWKS verification failed: %s", e)
 
     # --- Legacy HS256 shared secret ---
     if SUPABASE_JWT_SECRET:
@@ -52,7 +52,7 @@ def _decode(token: str) -> dict | None:
                 options={"verify_aud": False},
             )
         except Exception as exc:
-            log.warning("HS256 verification failed: %s", exc)
+            log.debug("HS256 verification failed: %s", exc)
 
     return None
 

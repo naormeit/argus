@@ -88,8 +88,6 @@ app.add_middleware(
 
 def _get_user_id(request: Request) -> str | None:
     auth = request.headers.get("Authorization", "")
-    log.warning("AUTH_DEBUG: has_auth=%s starts_bearer=%s token_len=%d",
-                bool(auth), auth.startswith("Bearer "), len(auth[7:]) if auth.startswith("Bearer ") else 0)
     if not auth.startswith("Bearer "):
         return None
     return verify_supabase_token(auth[7:])
@@ -249,38 +247,6 @@ async def recent_reports(limit: int = 20):
         for r in rows
     ]
 
-
-@app.get("/debug-auth")
-async def debug_auth(request: Request):
-    """Temporary: show JWT verification details. Remove after debugging."""
-    import jwt as _jwt
-    auth = request.headers.get("Authorization", "")
-    result = {"has_auth_header": bool(auth), "starts_bearer": auth.startswith("Bearer ")}
-    if auth.startswith("Bearer "):
-        token = auth[7:]
-        result["token_length"] = len(token)
-        try:
-            header = _jwt.get_unverified_header(token)
-            result["alg"] = header.get("alg")
-            result["kid"] = header.get("kid")
-        except Exception as e:
-            result["header_error"] = str(e)
-        from auth import _decode, _get_jwks_client
-        from config import SUPABASE_JWT_SECRET, SUPABASE_PROJECT_REF
-        result["project_ref"] = SUPABASE_PROJECT_REF
-        result["has_jwt_secret"] = bool(SUPABASE_JWT_SECRET)
-        try:
-            client = _get_jwks_client()
-            key = client.get_signing_key_from_jwt(token)
-            result["jwks_key_found"] = True
-            result["jwks_key_type"] = str(type(key.key))
-        except Exception as e:
-            result["jwks_error"] = str(e)
-        payload = _decode(token)
-        result["decoded"] = bool(payload)
-        if payload:
-            result["sub"] = payload.get("sub", "")[:8] + "..."
-    return result
 
 
 @app.get("/audits/me", response_model=list[AuditListItem])
