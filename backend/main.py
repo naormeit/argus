@@ -155,12 +155,11 @@ async def health():
     return {"status": "ok", "service": "argus", "db": _db_enabled}
 
 
-async def _require_credits(request: Request) -> str:
-    """Dependency: require a valid JWT and available audit credits. Returns user_id."""
+async def _require_credits(request: Request) -> str | None:
+    """Soft auth: returns user_id if a valid JWT is present, None for anonymous.
+    Blocks only when a logged-in user has no credits left."""
     user_id = _get_user_id(request)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required.")
-    if _db_enabled and not await has_audit_access(user_id):
+    if user_id and _db_enabled and not await has_audit_access(user_id):
         raise HTTPException(status_code=402, detail="No credits remaining. Please top up.")
     return user_id
 
@@ -404,11 +403,24 @@ async def _handle_pr_scan(
         if not sol_files:
             return
         comments: list[str] = []
+        source_ref = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
         for f in sol_files[:5]:
             try:
                 source = await fetch_raw_file(token, f["raw_url"])
-                report = await pipeline.run(source, "solidity", audit_id=str(uuid.uuid4()))
+                audit_id = str(uuid.uuid4())
+                report = await pipeline.run(source, "solidity", audit_id=audit_id)
                 comments.append(_format_pr_comment(f["filename"], report))
+                if _db_enabled:
+                    try:
+                        await save_audit(
+                            report.model_dump(),
+                            source,
+                            "solidity",
+                            source_type="github_pr",
+                            source_ref=source_ref,
+                        )
+                    except Exception as db_exc:
+                        log.warning("[GH] DB save failed for %s: %s", f["filename"], db_exc)
             except Exception as exc:
                 log.warning("[GH] scan failed for %s: %s", f["filename"], exc)
         if comments:
