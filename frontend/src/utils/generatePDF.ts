@@ -42,8 +42,10 @@ export function generatePDF(report: AuditReport): void {
 
   const wrap = (text: string, x: number, maxW: number, lineH: number): number => {
     const lines = doc.splitTextToSize(text, maxW) as string[]
-    doc.text(lines, x, y)
-    y += lines.length * lineH
+    lines.forEach(line => {
+      doc.text(line, x, y)
+      y += lineH
+    })
     return lines.length
   }
 
