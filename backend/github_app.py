@@ -38,7 +38,7 @@ def _app_jwt() -> str:
         raise RuntimeError("GITHUB_APP_ID and GITHUB_PRIVATE_KEY must be set.")
     now = int(time.time())
     return jwt.encode(
-        {"iat": now - 60, "exp": now + 600, "iss": int(GITHUB_APP_ID)},
+        {"iat": now - 60, "exp": now + 600, "iss": str(GITHUB_APP_ID)},
         GITHUB_PRIVATE_KEY,
         algorithm="RS256",
     )
