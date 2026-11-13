@@ -1,12 +1,11 @@
 """
 Scout — Attack Surface Mapper
 First agent in the Argus pipeline.
-Calls Muse Spark to map entry points, state changes, and suspicious patterns.
+Calls Claude to map entry points, state changes, and suspicious patterns.
 """
-import json
 import logging
-from openai import AsyncOpenAI
-from config import META_API_KEY, META_API_BASE_URL, MUSE_SPARK_MODEL
+import anthropic
+from config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 from models import AttackSurface, AttackVector
 from agents.base import BaseAgent
 from signing import ArgusLedger
@@ -40,12 +39,12 @@ confidence: 1.0 = certain, 0.0 = speculative. Only flag real patterns."""
 class ScoutAgent(BaseAgent):
     def __init__(self, ledger: ArgusLedger):
         super().__init__("scout", ledger)
-        self._client: AsyncOpenAI | None = None
+        self._client: anthropic.AsyncAnthropic | None = None
 
     @property
-    def client(self) -> AsyncOpenAI:
+    def client(self) -> anthropic.AsyncAnthropic:
         if self._client is None:
-            self._client = AsyncOpenAI(api_key=META_API_KEY, base_url=META_API_BASE_URL)
+            self._client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
         return self._client
 
     async def run(self, code: str, language: str, transfer_id: str,
@@ -68,17 +67,14 @@ class ScoutAgent(BaseAgent):
             f"```{language}\n{code}\n```\n\nReturn only valid JSON."
         )
 
-        resp = await self.client.chat.completions.create(
-            model=MUSE_SPARK_MODEL,
-            messages=[
-                {"role": "system", "content": _SYSTEM},
-                {"role": "user",   "content": user_msg},
-            ],
-            temperature=0.1,
+        resp = await self.client.messages.create(
+            model=CLAUDE_MODEL,
             max_tokens=2048,
+            system=_SYSTEM,
+            messages=[{"role": "user", "content": user_msg}],
         )
 
-        raw  = resp.choices[0].message.content or ""
+        raw  = resp.content[0].text if resp.content else ""
         data = self._parse_obj(raw, "Scout")
 
         patterns = [

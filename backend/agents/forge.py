@@ -1,12 +1,11 @@
 """
 Forge — PoC Exploit Generator
-Third agent. Takes Hunter's exploit paths and uses Muse Code to generate
-runnable proof-of-concept exploit code.
+Third agent. Takes Hunter's exploit paths and generates runnable proof-of-concept exploit code.
 """
 import json
 import logging
-from openai import AsyncOpenAI
-from config import META_API_KEY, META_API_BASE_URL, MUSE_CODE_MODEL
+import anthropic
+from config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 from models import ExploitPath, ProofOfConcept
 from agents.base import BaseAgent
 from signing import ArgusLedger
@@ -35,12 +34,12 @@ Be precise, not generic."""
 class ForgeAgent(BaseAgent):
     def __init__(self, ledger: ArgusLedger):
         super().__init__("forge", ledger)
-        self._client: AsyncOpenAI | None = None
+        self._client: anthropic.AsyncAnthropic | None = None
 
     @property
-    def client(self) -> AsyncOpenAI:
+    def client(self) -> anthropic.AsyncAnthropic:
         if self._client is None:
-            self._client = AsyncOpenAI(api_key=META_API_KEY, base_url=META_API_BASE_URL)
+            self._client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
         return self._client
 
     async def run(self, paths: list[ExploitPath], envelope: dict, transfer_id: str) -> tuple[list[ProofOfConcept], dict]:
@@ -55,17 +54,17 @@ class ForgeAgent(BaseAgent):
 
         paths_json = json.dumps(paths_raw, indent=2)
 
-        resp = await self.client.chat.completions.create(
-            model=MUSE_CODE_MODEL,
-            messages=[
-                {"role": "system", "content": _SYSTEM},
-                {"role": "user",   "content": f"Exploit paths to implement:\n{paths_json}\n\nReturn only valid JSON array."},
-            ],
-            temperature=0.2,
+        resp = await self.client.messages.create(
+            model=CLAUDE_MODEL,
             max_tokens=4096,
+            system=_SYSTEM,
+            messages=[{
+                "role": "user",
+                "content": f"Exploit paths to implement:\n{paths_json}\n\nReturn only valid JSON array."
+            }],
         )
 
-        raw   = resp.choices[0].message.content or ""
+        raw   = resp.content[0].text if resp.content else ""
         items = self._parse_arr(raw, "Forge")
 
         pocs: list[ProofOfConcept] = []

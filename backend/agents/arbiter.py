@@ -5,10 +5,9 @@ Fourth agent. Synthesizes all findings into a cryptographically signed audit rep
 import hashlib
 import json
 import logging
-import uuid
 from datetime import datetime, timezone
-from openai import AsyncOpenAI
-from config import META_API_KEY, META_API_BASE_URL, MUSE_SPARK_MODEL
+import anthropic
+from config import ANTHROPIC_API_KEY, CLAUDE_SMART_MODEL
 from models import AttackSurface, ProofOfConcept, AuditReport, Finding, Severity
 from agents.base import BaseAgent
 from signing import ArgusLedger
@@ -45,12 +44,12 @@ _SEVERITY_ORDER = {
 class ArbiterAgent(BaseAgent):
     def __init__(self, ledger: ArgusLedger):
         super().__init__("arbiter", ledger)
-        self._client: AsyncOpenAI | None = None
+        self._client: anthropic.AsyncAnthropic | None = None
 
     @property
-    def client(self) -> AsyncOpenAI:
+    def client(self) -> anthropic.AsyncAnthropic:
         if self._client is None:
-            self._client = AsyncOpenAI(api_key=META_API_KEY, base_url=META_API_BASE_URL)
+            self._client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
         return self._client
 
     async def run(
@@ -73,22 +72,21 @@ class ArbiterAgent(BaseAgent):
             "proofs_of_concept": pocs_raw,
         }
 
-        resp = await self.client.chat.completions.create(
-            model=MUSE_SPARK_MODEL,
-            messages=[
-                {"role": "system", "content": _SYSTEM},
-                {"role": "user",   "content": f"Audit context:\n{json.dumps(context, indent=2)}\n\nReturn only valid JSON."},
-            ],
-            temperature=0.1,
+        resp = await self.client.messages.create(
+            model=CLAUDE_SMART_MODEL,
             max_tokens=3000,
+            system=_SYSTEM,
+            messages=[{
+                "role": "user",
+                "content": f"Audit context:\n{json.dumps(context, indent=2)}\n\nReturn only valid JSON."
+            }],
         )
 
-        raw   = resp.choices[0].message.content or ""
+        raw   = resp.content[0].text if resp.content else ""
         data  = self._parse_obj(raw, "Arbiter")
 
         findings: list[Finding] = []
         for f in data.get("findings", []):
-            # Pull poc_code from matching PoC if available
             poc_code = None
             for p in pocs:
                 if p.exploit_path.vulnerability.function_name in f.get("vulnerability", ""):
@@ -111,7 +109,6 @@ class ArbiterAgent(BaseAgent):
         except ValueError:
             overall_risk = Severity.MEDIUM
 
-        # If LLM didn't derive it, compute from highest finding severity
         if findings and overall_risk == Severity.MEDIUM:
             highest = max(findings, key=lambda x: _SEVERITY_ORDER.get(x.severity, 0))
             overall_risk = highest.severity

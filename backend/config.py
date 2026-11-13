@@ -3,10 +3,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-META_API_KEY       = os.getenv("GROQ_API_KEY", os.getenv("META_API_KEY", ""))
-META_API_BASE_URL  = os.getenv("META_API_BASE_URL", "https://api.groq.com/openai/v1")
-MUSE_SPARK_MODEL   = os.getenv("MUSE_SPARK_MODEL", os.getenv("MODEL", "openai/gpt-oss-20b"))
-MUSE_CODE_MODEL    = os.getenv("MUSE_CODE_MODEL",  os.getenv("MODEL", "openai/gpt-oss-20b"))
+# Claude AI — primary LLM for all agents (Phase 6+)
+ANTHROPIC_API_KEY  = os.getenv("ANTHROPIC_API_KEY", "")
+CLAUDE_MODEL       = os.getenv("CLAUDE_MODEL", "claude-haiku-5-5")       # Scout + Forge
+CLAUDE_SMART_MODEL = os.getenv("CLAUDE_SMART_MODEL", "claude-sonnet-4-6") # Hunter + Arbiter
 LOOM_SECRET        = os.getenv("LOOM_SECRET", "argus-dev-secret-change-in-prod")
 DATABASE_URL       = os.getenv("DATABASE_URL", "")
 ETHERSCAN_API_KEY  = os.getenv("ETHERSCAN_API_KEY", "")
