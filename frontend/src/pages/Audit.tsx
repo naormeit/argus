@@ -6,6 +6,7 @@ import AuditReport from '../components/AuditReport'
 import { AgentStatus, AuditReport as Report } from '../types'
 import { useAuth } from '../context/AuthContext'
 import { useCredits } from '../hooks/useCredits'
+import { generatePDF } from '../utils/generatePDF'
 
 const LANGUAGES = ['solidity', 'python', 'javascript', 'typescript', 'rust', 'go']
 
@@ -48,7 +49,7 @@ type InputTab = 'paste' | 'address' | 'github'
 export default function Audit() {
   const navigate = useNavigate()
   const { user, session, loading: authLoading } = useAuth()
-  const { info: creditsInfo, hasAccess } = useCredits()
+  const { hasAccess } = useCredits()
 
   const [inputTab, setInputTab]       = useState<InputTab>('paste')
   const [code, setCode]               = useState(VULNERABLE_BANK)
@@ -182,13 +183,7 @@ export default function Audit() {
 
   const downloadReport = () => {
     if (!report) return
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href     = url
-    a.download = `argus-report-${report.audit_id}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    generatePDF(report)
   }
 
   // Gate: not logged in
@@ -343,7 +338,7 @@ export default function Audit() {
                   className="animate-fade-in flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-argus-muted
                     border border-argus-border hover:border-blue-500/50 hover:text-blue-400 hover:bg-blue-900/10 transition-all"
                 >
-                  ↓ Download Report
+                  ↓ Download PDF
                 </button>
                 <button
                   onClick={shareReport}
