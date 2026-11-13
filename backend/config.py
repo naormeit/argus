@@ -6,8 +6,8 @@ load_dotenv()
 # Groq — free-tier LLM for all agents
 GROQ_API_KEY       = os.getenv("GROQ_API_KEY", "")
 GROQ_API_BASE      = "https://api.groq.com/openai/v1"
-GROQ_FAST_MODEL    = os.getenv("GROQ_FAST_MODEL",  "llama-3.3-70b-versatile")  # Scout + Forge
-GROQ_SMART_MODEL   = os.getenv("GROQ_SMART_MODEL", "llama-3.3-70b-versatile")  # Hunter + Arbiter
+GROQ_FAST_MODEL    = os.getenv("GROQ_FAST_MODEL",  "qwen/qwen3.8-27b")        # Scout + Forge
+GROQ_SMART_MODEL   = os.getenv("GROQ_SMART_MODEL", "openai/gpt-oss-120b")     # Hunter + Arbiter
 LOOM_SECRET        = os.getenv("LOOM_SECRET", "argus-dev-secret-change-in-prod")
 DATABASE_URL       = os.getenv("DATABASE_URL", "")
 ETHERSCAN_API_KEY  = os.getenv("ETHERSCAN_API_KEY", "")
