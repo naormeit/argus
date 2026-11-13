@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard'
 import Pricing from './pages/Pricing'
 import Success from './pages/Success'
 import GitHub from './pages/GitHub'
+import Admin from './pages/Admin'
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/pricing"    element={<Pricing />} />
           <Route path="/success"    element={<Success />} />
           <Route path="/github"     element={<GitHub />} />
+          <Route path="/admin"      element={<Admin />} />
           <Route path="*"           element={<Landing />} />
         </Routes>
       </AuthProvider>

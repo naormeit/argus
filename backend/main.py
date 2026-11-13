@@ -28,7 +28,8 @@ from models import AuditRequest, AuditStatus, AuditReport, AuditListItem
 from pipeline import ArgusPipeline
 from etherscan import fetch_contract_source, ContractNotVerified, ExplorerError
 from github_fetcher import fetch_github_source, GitHubFetchError
-from auth import verify_supabase_token
+from auth import verify_supabase_token, get_user_claims
+from config import ADMIN_EMAIL
 
 stripe.api_key = STRIPE_SECRET_KEY
 
@@ -40,7 +41,7 @@ pipeline = ArgusPipeline()
 # DB is optional — gracefully disabled if DATABASE_URL is not set
 _db_enabled = bool(DATABASE_URL)
 if _db_enabled:
-    from database import get_pool, close_pool, save_audit, get_audit, list_audits, list_audits_for_user
+    from database import get_pool, close_pool, save_audit, get_audit, list_audits, list_audits_for_user, admin_stats
     from billing import (
         get_credits, has_audit_access, deduct_credit, add_credits,
         activate_subscription, cancel_subscription_by_customer, update_subscription_status,
@@ -256,6 +257,50 @@ async def my_audits(limit: int = 50, request: Request = None):
     if not _db_enabled:
         return []
     rows = await list_audits_for_user(user_id, min(limit, 100))
+    return [
+        AuditListItem(
+            id=str(r["id"]),
+            created_at=r["created_at"].isoformat(),
+            language=r["language"],
+            source_type=r["source_type"],
+            source_ref=r.get("source_ref"),
+            network=r.get("network"),
+            overall_risk=r.get("overall_risk"),
+            findings_count=r.get("findings_count", 0),
+            summary=r.get("summary"),
+        )
+        for r in rows
+    ]
+
+
+# ── Admin ─────────────────────────────────────────────────────────────────────
+
+def _require_admin(request: Request) -> str:
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    claims = get_user_claims(auth[7:])
+    if not claims:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    if not ADMIN_EMAIL or claims.get("email") != ADMIN_EMAIL:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return claims["sub"]
+
+
+@app.get("/admin/stats")
+async def get_admin_stats(request: Request):
+    _require_admin(request)
+    if not _db_enabled:
+        raise HTTPException(status_code=503, detail="Persistence not configured.")
+    return await admin_stats()
+
+
+@app.get("/admin/audits")
+async def get_admin_audits(limit: int = 50, request: Request = None):
+    _require_admin(request)
+    if not _db_enabled:
+        return []
+    rows = await list_audits(min(limit, 200))
     return [
         AuditListItem(
             id=str(r["id"]),

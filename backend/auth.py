@@ -27,3 +27,20 @@ def verify_supabase_token(token: str) -> Optional[str]:
     except Exception as exc:
         log.debug("JWT verification failed: %s", exc)
         return None
+
+
+def get_user_claims(token: str) -> Optional[dict]:
+    """Decode a Supabase access token and return {sub, email}, or None."""
+    if not SUPABASE_JWT_SECRET or not token:
+        return None
+    try:
+        payload = jwt.decode(
+            token,
+            SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            options={"verify_aud": False},
+        )
+        return {"sub": payload.get("sub"), "email": payload.get("email", "")}
+    except Exception as exc:
+        log.debug("JWT verification failed: %s", exc)
+        return None

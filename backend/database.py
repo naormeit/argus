@@ -85,6 +85,37 @@ async def list_audits(limit: int = 20) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+async def admin_stats() -> dict:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        total          = await conn.fetchval("SELECT COUNT(*) FROM audits")
+        total_findings = await conn.fetchval("SELECT COALESCE(SUM(findings_count), 0) FROM audits")
+        recent_7d      = await conn.fetchval("SELECT COUNT(*) FROM audits WHERE created_at >= NOW() - INTERVAL '7 days'")
+        prev_7d        = await conn.fetchval("SELECT COUNT(*) FROM audits WHERE created_at >= NOW() - INTERVAL '14 days' AND created_at < NOW() - INTERVAL '7 days'")
+        users_count    = await conn.fetchval("SELECT COUNT(DISTINCT user_id) FROM audits WHERE user_id IS NOT NULL")
+        by_risk        = await conn.fetch("SELECT overall_risk, COUNT(*) AS count FROM audits WHERE overall_risk IS NOT NULL GROUP BY overall_risk ORDER BY count DESC")
+        by_language    = await conn.fetch("SELECT language, COUNT(*) AS count FROM audits GROUP BY language ORDER BY count DESC LIMIT 10")
+        by_source_type = await conn.fetch("SELECT source_type, COUNT(*) AS count FROM audits GROUP BY source_type ORDER BY count DESC")
+        daily          = await conn.fetch("""
+            SELECT DATE(created_at) AS day, COUNT(*) AS count
+            FROM audits
+            WHERE created_at >= NOW() - INTERVAL '14 days'
+            GROUP BY DATE(created_at)
+            ORDER BY day
+        """)
+    return {
+        "total_audits":    int(total),
+        "total_findings":  int(total_findings),
+        "recent_7d":       int(recent_7d),
+        "prev_7d":         int(prev_7d),
+        "users_count":     int(users_count),
+        "by_risk":         [{"risk": r["overall_risk"], "count": int(r["count"])} for r in by_risk],
+        "by_language":     [{"language": r["language"],  "count": int(r["count"])} for r in by_language],
+        "by_source_type":  [{"type": r["source_type"],   "count": int(r["count"])} for r in by_source_type],
+        "daily_audits":    [{"date": str(r["day"]),       "count": int(r["count"])} for r in daily],
+    }
+
+
 async def list_audits_for_user(user_id: str, limit: int = 50) -> list[dict]:
     pool = await get_pool()
     async with pool.acquire() as conn:
