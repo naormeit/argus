@@ -186,8 +186,8 @@ export default function Audit() {
     generatePDF(report)
   }
 
-  // Gate: not logged in
-  if (!authLoading && !user) {
+  // Gate: logged in but no credits (anonymous users always pass through)
+  if (false && !authLoading && !user) {
     return (
       <div className="min-h-screen bg-lux-black text-lux-white flex items-center justify-center px-4">
         <div className="text-center max-w-sm">
