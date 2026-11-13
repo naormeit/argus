@@ -88,6 +88,8 @@ app.add_middleware(
 
 def _get_user_id(request: Request) -> str | None:
     auth = request.headers.get("Authorization", "")
+    log.warning("AUTH_DEBUG: has_auth=%s starts_bearer=%s token_len=%d",
+                bool(auth), auth.startswith("Bearer "), len(auth[7:]) if auth.startswith("Bearer ") else 0)
     if not auth.startswith("Bearer "):
         return None
     return verify_supabase_token(auth[7:])
