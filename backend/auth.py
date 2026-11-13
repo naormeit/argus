@@ -22,7 +22,7 @@ _jwks_client: PyJWKClient | None = None
 def _get_jwks_client() -> PyJWKClient:
     global _jwks_client
     if _jwks_client is None:
-        jwks_url = f"https://{SUPABASE_PROJECT_REF}.supabase.co/auth/v1/keys"
+        jwks_url = f"https://{SUPABASE_PROJECT_REF}.supabase.co/auth/v1/.well-known/jwks.json"
         _jwks_client = PyJWKClient(jwks_url, cache_jwk_set=True, lifespan=3600)
     return _jwks_client
 
