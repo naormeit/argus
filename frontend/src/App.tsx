@@ -8,6 +8,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Pricing from './pages/Pricing'
 import Success from './pages/Success'
+import GitHub from './pages/GitHub'
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="/dashboard"  element={<Dashboard />} />
           <Route path="/pricing"    element={<Pricing />} />
           <Route path="/success"    element={<Success />} />
+          <Route path="/github"     element={<GitHub />} />
           <Route path="*"           element={<Landing />} />
         </Routes>
       </AuthProvider>

@@ -16,3 +16,7 @@ STRIPE_WEBHOOK_SECRET    = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_CREDIT_PRICE_ID   = os.getenv("STRIPE_CREDIT_PRICE_ID", "")   # $9.99 / 10 audits
 STRIPE_PRO_PRICE_ID      = os.getenv("STRIPE_PRO_PRICE_ID", "")       # $29/month
 FRONTEND_URL             = os.getenv("FRONTEND_URL", "https://frontend-eight-theta-43.vercel.app")
+GITHUB_APP_ID            = os.getenv("GITHUB_APP_ID", "")
+GITHUB_PRIVATE_KEY       = os.getenv("GITHUB_PRIVATE_KEY", "").replace("\\n", "\n")
+GITHUB_WEBHOOK_SECRET    = os.getenv("GITHUB_WEBHOOK_SECRET", "")
+GITHUB_APP_NAME          = os.getenv("GITHUB_APP_NAME", "argus-auditor")

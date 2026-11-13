@@ -22,6 +22,7 @@ import stripe
 from config import (
     DATABASE_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
     STRIPE_CREDIT_PRICE_ID, STRIPE_PRO_PRICE_ID, FRONTEND_URL,
+    GITHUB_APP_ID, GITHUB_WEBHOOK_SECRET, GITHUB_APP_NAME,
 )
 from models import AuditRequest, AuditStatus, AuditReport, AuditListItem
 from pipeline import ArgusPipeline
@@ -374,3 +375,85 @@ async def stripe_webhook(request: Request):
         await update_subscription_status(customer_id, status)
 
     return {"received": True}
+
+
+# ── GitHub App webhook ────────────────────────────────────────────────────────
+
+def _format_pr_comment(filename: str, report) -> str:
+    _emoji = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵", "info": "⚪"}
+    risk = report.overall_risk.value
+    lines = [f"### {_emoji.get(risk, '⚪')} `{filename}` — **{risk.upper()} RISK**"]
+    if report.findings:
+        lines.append(f"\n**{len(report.findings)} finding(s) detected:**\n")
+        for f in report.findings[:10]:
+            sev = f.severity.value
+            lines.append(f"- {_emoji.get(sev, '⚪')} **{f.vulnerability}** `{sev}`  ")
+            lines.append(f"  {f.description[:180]}")
+    else:
+        lines.append("\n✅ No issues detected.")
+    return "\n".join(lines)
+
+
+async def _handle_pr_scan(
+    installation_id: int, owner: str, repo: str, pr_number: int
+) -> None:
+    from github_app import get_installation_token, get_pr_sol_files, fetch_raw_file, post_pr_comment
+    try:
+        token = await get_installation_token(installation_id)
+        sol_files = await get_pr_sol_files(token, owner, repo, pr_number)
+        if not sol_files:
+            return
+        comments: list[str] = []
+        for f in sol_files[:5]:
+            try:
+                source = await fetch_raw_file(token, f["raw_url"])
+                report = await pipeline.run(source, "solidity", audit_id=str(uuid.uuid4()))
+                comments.append(_format_pr_comment(f["filename"], report))
+            except Exception as exc:
+                log.warning("[GH] scan failed for %s: %s", f["filename"], exc)
+        if comments:
+            body = (
+                "## 🔍 Argus Security Scan\n\n"
+                + "\n\n---\n\n".join(comments)
+                + f"\n\n*Powered by [Argus]({FRONTEND_URL}) — Multi-Agent Smart Contract Auditor*"
+            )
+            await post_pr_comment(token, owner, repo, pr_number, body)
+    except Exception as exc:
+        log.error("[GH] PR scan failed for %s/%s#%d: %s", owner, repo, pr_number, exc)
+
+
+@app.post("/webhooks/github")
+async def github_webhook(request: Request):
+    """Receive GitHub App pull_request events and trigger an audit."""
+    if not GITHUB_APP_ID or not GITHUB_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="GitHub App not configured.")
+    payload = await request.body()
+    sig = request.headers.get("X-Hub-Signature-256", "")
+    event = request.headers.get("X-GitHub-Event", "")
+
+    from github_app import verify_webhook_signature
+    if not verify_webhook_signature(payload, sig):
+        raise HTTPException(status_code=400, detail="Invalid GitHub signature.")
+
+    if event != "pull_request":
+        return {"received": True}
+
+    data = json.loads(payload)
+    if data.get("action") not in ("opened", "synchronize", "reopened"):
+        return {"received": True}
+
+    installation_id: int = data["installation"]["id"]
+    owner: str = data["repository"]["owner"]["login"]
+    repo: str = data["repository"]["name"]
+    pr_number: int = data["pull_request"]["number"]
+
+    asyncio.create_task(_handle_pr_scan(installation_id, owner, repo, pr_number))
+    return {"received": True}
+
+
+@app.get("/github/install-url")
+async def github_install_url():
+    """Return the GitHub App installation URL."""
+    if not GITHUB_APP_NAME:
+        raise HTTPException(status_code=503, detail="GitHub App not configured.")
+    return {"url": f"https://github.com/apps/{GITHUB_APP_NAME}/installations/new"}

@@ -42,7 +42,7 @@ export default function Navbar() {
           {[
             { to: '/',          label: 'Home'      },
             { to: '/audit',     label: 'Audit'     },
-            ...(user ? [{ to: '/dashboard', label: 'Dashboard' }, { to: '/pricing', label: 'Pricing' }] : [{ to: '/pricing', label: 'Pricing' }]),
+            ...(user ? [{ to: '/dashboard', label: 'Dashboard' }, { to: '/github', label: 'GitHub' }, { to: '/pricing', label: 'Pricing' }] : [{ to: '/pricing', label: 'Pricing' }]),
           ].map(({ to, label }) => (
             <Link
               key={to}

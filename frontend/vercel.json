@@ -6,6 +6,7 @@
     { "source": "/api/audits/:path*",    "destination": "https://argus-backend-1ge3.onrender.com/audits/:path*" },
     { "source": "/api/me",               "destination": "https://argus-backend-1ge3.onrender.com/me" },
     { "source": "/api/checkout/:path*",  "destination": "https://argus-backend-1ge3.onrender.com/checkout/:path*" },
+    { "source": "/api/github/:path*",    "destination": "https://argus-backend-1ge3.onrender.com/github/:path*" },
     { "source": "/api/health",           "destination": "https://argus-backend-1ge3.onrender.com/health" },
     { "source": "/(.*)",              "destination": "/index.html" }
   ]
