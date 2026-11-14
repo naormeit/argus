@@ -64,8 +64,10 @@ class AuditReport(BaseModel):
     summary:      str
 
 
+MAX_CODE_BYTES = 500_000  # 500 KB — prevents pipeline OOM on huge pastes
+
 class AuditRequest(BaseModel):
-    code:        str
+    code:        str = Field(..., max_length=MAX_CODE_BYTES)
     language:    str = "solidity"
     audit_id:    Optional[str] = None
     source_type: str = "paste"          # 'paste' | 'address'
@@ -87,7 +89,8 @@ class AuditListItem(BaseModel):
 
 class AuditStatus(BaseModel):
     audit_id:      str
-    status:        str   # running | completed | failed
+    status:        str   # running | completed | error
+    message:       Optional[str] = None
     current_agent: Optional[str] = None
     progress:      int = 0
     report:        Optional[AuditReport] = None

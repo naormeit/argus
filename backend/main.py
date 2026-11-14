@@ -16,13 +16,16 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 import stripe
 
 from config import (
     DATABASE_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
     STRIPE_CREDIT_PRICE_ID, STRIPE_PRO_PRICE_ID, FRONTEND_URL,
-    GITHUB_APP_ID, GITHUB_WEBHOOK_SECRET, GITHUB_APP_NAME,
+    GITHUB_APP_ID, GITHUB_WEBHOOK_SECRET, GITHUB_APP_NAME, LOOM_SECRET,
 )
 from models import AuditRequest, AuditStatus, AuditReport, AuditListItem
 from pipeline import ArgusPipeline
@@ -35,6 +38,17 @@ stripe.api_key = STRIPE_SECRET_KEY
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
 log = logging.getLogger(__name__)
+
+# Fail fast on missing critical secrets
+if not LOOM_SECRET:
+    raise RuntimeError("LOOM_SECRET env var is required but not set.")
+
+# Rate limiter — in-memory per IP (replace storage with Redis for multi-instance)
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/hour"])
+
+# Semaphore: cap concurrent audits to prevent memory/CPU exhaustion
+_MAX_CONCURRENT_AUDITS = int(os.getenv("MAX_CONCURRENT_AUDITS", "10"))
+_audit_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_AUDITS)
 
 pipeline = ArgusPipeline()
 
@@ -67,6 +81,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Argus — Multi-Agent Security Auditor", version="0.2.0", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 _extra_origins = os.getenv("CORS_ORIGINS", "").split(",")
 _origins = [
@@ -104,30 +120,31 @@ def _make_stream(req: AuditRequest, user_id: str | None = None):
         await queue.put(status)
 
     async def _run():
-        try:
-            report = await pipeline.run(
-                req.code, req.language, audit_id=audit_id, on_progress=on_progress
-            )
-            if _db_enabled:
-                try:
-                    await save_audit(
-                        report.model_dump(),
-                        req.code,
-                        req.language,
-                        source_type=req.source_type,
-                        source_ref=req.source_ref,
-                        network=req.network,
-                        user_id=user_id,
-                    )
-                    if user_id:
-                        await deduct_credit(user_id)
-                except Exception as db_err:
-                    log.warning(f"Failed to persist audit {audit_id}: {db_err}")
-        except Exception as exc:
-            log.error("Pipeline failed for audit %s: %s", audit_id, exc)
-            await queue.put(AuditStatus(status='error', message=str(exc)))
-        finally:
-            await queue.put(None)
+        async with _audit_semaphore:
+            try:
+                report = await pipeline.run(
+                    req.code, req.language, audit_id=audit_id, on_progress=on_progress
+                )
+                if _db_enabled:
+                    try:
+                        await save_audit(
+                            report.model_dump(),
+                            req.code,
+                            req.language,
+                            source_type=req.source_type,
+                            source_ref=req.source_ref,
+                            network=req.network,
+                            user_id=user_id,
+                        )
+                        if user_id:
+                            await deduct_credit(user_id)
+                    except Exception as db_err:
+                        log.warning(f"Failed to persist audit {audit_id}: {db_err}")
+            except Exception as exc:
+                log.error("Pipeline failed for audit %s: %s", audit_id, exc)
+                await queue.put(AuditStatus(audit_id=audit_id, status='error', message=str(exc)))
+            finally:
+                await queue.put(None)
 
     asyncio.create_task(_run())
 
@@ -167,6 +184,7 @@ async def _require_credits(request: Request) -> str | None:
 
 
 @app.post("/audit/stream")
+@limiter.limit("5/minute;20/hour")
 async def stream_audit(req: AuditRequest, request: Request):
     """Stream a code-paste audit via SSE."""
     user_id = await _require_credits(request)
@@ -174,6 +192,7 @@ async def stream_audit(req: AuditRequest, request: Request):
 
 
 @app.post("/audit/address")
+@limiter.limit("5/minute;20/hour")
 async def audit_address(address: str, network: str = "ethereum", request: Request = None):
     """Fetch verified source from a block explorer, then stream the audit."""
     user_id = await _require_credits(request)
@@ -197,6 +216,7 @@ async def audit_address(address: str, network: str = "ethereum", request: Reques
 
 
 @app.post("/audit/github")
+@limiter.limit("5/minute;20/hour")
 async def audit_github(url: str, request: Request = None):
     """Fetch .sol source from a GitHub URL, then stream the audit."""
     user_id = await _require_credits(request)
@@ -352,7 +372,7 @@ async def checkout_credits(request: Request):
         line_items=[{"price": STRIPE_CREDIT_PRICE_ID, "quantity": 1}],
         client_reference_id=user_id,
         customer_email=email or None,
-        success_url=f"{FRONTEND_URL}/success?session_id={{CHECKOUT_SESSION_ID}}",
+        success_url=f"{FRONTEND_URL}/success?type=credits&session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=f"{FRONTEND_URL}/pricing",
     )
     return {"url": session.url}
@@ -373,7 +393,7 @@ async def checkout_subscribe(request: Request):
         line_items=[{"price": STRIPE_PRO_PRICE_ID, "quantity": 1}],
         client_reference_id=user_id,
         customer_email=email or None,
-        success_url=f"{FRONTEND_URL}/success?session_id={{CHECKOUT_SESSION_ID}}",
+        success_url=f"{FRONTEND_URL}/success?type=pro&session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=f"{FRONTEND_URL}/pricing",
     )
     return {"url": session.url}
