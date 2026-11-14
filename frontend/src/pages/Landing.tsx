@@ -314,15 +314,13 @@ export default function Landing() {
             >
               Run an Audit <IconArrow />
             </MagneticLink>
-            <a
-              href="https://github.com/naormeit/argus"
-              target="_blank"
-              rel="noopener noreferrer"
+            <MagneticLink
+              to="/pricing"
               className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-lux-white/8
                 text-lux-ice/40 hover:border-lux-gold/30 hover:text-lux-gold/70 transition-all duration-300 text-sm"
             >
-              <IconGithub /> View on GitHub
-            </a>
+              View Pricing <IconArrow />
+            </MagneticLink>
           </div>
 
           {/* Trust */}
@@ -537,12 +535,7 @@ export default function Landing() {
         </div>
         <div className="border-t border-lux-white/4 max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <span className="text-xs text-lux-ice/12">© 2026 Argus</span>
-          <div className="flex items-center gap-4">
-            <a href="https://github.com/naormeit/argus" target="_blank" rel="noopener noreferrer"
-              className="text-xs text-lux-ice/12 hover:text-lux-ice/30 transition-colors flex items-center gap-1.5">
-              <IconGithub /> GitHub
-            </a>
-          </div>
+          <span className="text-xs text-lux-ice/12">AI-Powered Smart Contract Security</span>
         </div>
       </footer>
     </div>
