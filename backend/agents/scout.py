@@ -69,7 +69,7 @@ class ScoutAgent(BaseAgent):
 
         resp = await self.client.chat.completions.create(
             model=GROQ_FAST_MODEL,
-            max_tokens=2048,
+            max_tokens=900,
             messages=[
                 {"role": "system", "content": _SYSTEM},
                 {"role": "user",   "content": user_msg},
