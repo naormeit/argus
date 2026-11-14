@@ -174,7 +174,7 @@ export default function Pricing() {
         </div>
 
         <p className="text-center text-xs text-lux-ice/30 mt-10">
-          Payments processed securely by Stripe. Cancel anytime.
+          Payments processed securely by Lemon Squeezy. Cancel anytime.
         </p>
       </main>
     </div>
