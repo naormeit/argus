@@ -508,13 +508,13 @@ export default function Landing() {
               <span className="text-sm font-bold font-display text-lux-white">Argus</span>
             </div>
             <p className="text-xs text-lux-ice/22 leading-relaxed">
-              Multi-agent AI security auditor.<br />Built for Meta AI Global Hackathon 2026.
+              Multi-agent AI security auditor for smart contracts.
             </p>
           </div>
           <div>
             <div className="text-[10px] font-mono text-lux-gold/35 mb-4 uppercase tracking-widest">Product</div>
             <div className="space-y-2.5">
-              {[['Audit', '/audit'], ['Home', '/']].map(([label, to]) => (
+              {[['Audit', '/audit'], ['Pricing', '/pricing'], ['Home', '/']].map(([label, to]) => (
                 <Link key={label} to={to} className="block text-xs text-lux-ice/25 hover:text-lux-gold/65 transition-colors">{label}</Link>
               ))}
             </div>
@@ -528,16 +528,21 @@ export default function Landing() {
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-mono text-lux-gold/35 mb-4 uppercase tracking-widest">Links</div>
-            <a href="https://github.com/naormeit/argus" target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-lux-ice/25 hover:text-lux-gold/65 transition-colors">
-              <IconGithub /> GitHub
-            </a>
+            <div className="text-[10px] font-mono text-lux-gold/35 mb-4 uppercase tracking-widest">Legal</div>
+            <div className="space-y-2.5">
+              <Link to="/privacy" className="block text-xs text-lux-ice/25 hover:text-lux-gold/65 transition-colors">Privacy Policy</Link>
+              <Link to="/terms" className="block text-xs text-lux-ice/25 hover:text-lux-gold/65 transition-colors">Terms of Service</Link>
+            </div>
           </div>
         </div>
         <div className="border-t border-lux-white/4 max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <span className="text-xs text-lux-ice/12">© 2026 Argus</span>
-          <span className="text-xs text-lux-ice/12">Powered by Groq</span>
+          <div className="flex items-center gap-4">
+            <a href="https://github.com/naormeit/argus" target="_blank" rel="noopener noreferrer"
+              className="text-xs text-lux-ice/12 hover:text-lux-ice/30 transition-colors flex items-center gap-1.5">
+              <IconGithub /> GitHub
+            </a>
+          </div>
         </div>
       </footer>
     </div>

@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 
 export default function Login() {
   const navigate = useNavigate()
-  const [mode,     setMode]     = useState<'signin' | 'signup'>('signin')
+  const [mode,     setMode]     = useState<'signin' | 'signup' | 'reset'>('signin')
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
   const [loading,  setLoading]  = useState(false)
@@ -24,12 +24,21 @@ export default function Login() {
       } else {
         navigate('/dashboard')
       }
-    } else {
+    } else if (mode === 'signup') {
       const { error } = await supabase.auth.signUp({ email, password })
       if (error) {
         setError(error.message)
       } else {
         setSuccess('Check your email for a confirmation link.')
+      }
+    } else {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login?mode=update-password`,
+      })
+      if (error) {
+        setError(error.message)
+      } else {
+        setSuccess('Password reset email sent. Check your inbox.')
       }
     }
     setLoading(false)
@@ -53,12 +62,14 @@ export default function Login() {
             <span className="text-lg font-bold font-display text-lux-white tracking-tight">Argus</span>
           </Link>
           <h1 className="text-xl font-bold text-white">
-            {mode === 'signin' ? 'Sign in to your account' : 'Create an account'}
+            {mode === 'signin' ? 'Sign in to your account'
+              : mode === 'signup' ? 'Create an account'
+              : 'Reset your password'}
           </h1>
           <p className="mt-1 text-sm text-lux-ice/40">
-            {mode === 'signin'
-              ? 'Access your audit history'
-              : 'Start auditing smart contracts'}
+            {mode === 'signin' ? 'Access your audit history'
+              : mode === 'signup' ? 'Start auditing smart contracts'
+              : 'Enter your email and we\'ll send a reset link'}
           </p>
         </div>
 
@@ -81,22 +92,35 @@ export default function Login() {
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-lux-ice/60 uppercase tracking-wider mb-1.5">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                minLength={6}
-                placeholder="••••••••"
-                className="w-full bg-black/40 border border-lux-white/10 text-white text-sm
-                  rounded-lg px-3 py-2.5 outline-none placeholder:text-lux-ice/25
-                  focus:border-lux-gold/40 focus:ring-1 focus:ring-lux-gold/20 transition-colors"
-              />
-            </div>
+            {mode !== 'reset' && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-lux-ice/60 uppercase tracking-wider">
+                    Password
+                  </label>
+                  {mode === 'signin' && (
+                    <button
+                      type="button"
+                      onClick={() => { setMode('reset'); setError(null); setSuccess(null) }}
+                      className="text-xs text-lux-ice/35 hover:text-lux-gold/70 transition-colors"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  placeholder="••••••••"
+                  className="w-full bg-black/40 border border-lux-white/10 text-white text-sm
+                    rounded-lg px-3 py-2.5 outline-none placeholder:text-lux-ice/25
+                    focus:border-lux-gold/40 focus:ring-1 focus:ring-lux-gold/20 transition-colors"
+                />
+              </div>
+            )}
 
             {error && (
               <div className="rounded-lg border border-red-700/50 bg-red-900/20 px-3 py-2.5 text-xs text-red-400">
@@ -119,14 +143,19 @@ export default function Login() {
             >
               {loading ? (
                 <span className="inline-block w-4 h-4 border-2 border-lux-black/30 border-t-lux-black rounded-full animate-spin" />
-              ) : (
-                mode === 'signin' ? 'Sign In' : 'Create Account'
-              )}
+              ) : mode === 'signin' ? 'Sign In'
+                : mode === 'signup' ? 'Create Account'
+                : 'Send Reset Email'}
             </button>
           </form>
 
           <div className="mt-5 text-center text-sm text-lux-ice/40">
-            {mode === 'signin' ? (
+            {mode === 'reset' ? (
+              <button onClick={() => { setMode('signin'); setError(null); setSuccess(null) }}
+                className="text-lux-gold hover:text-lux-gold/80 font-medium transition-colors">
+                ← Back to sign in
+              </button>
+            ) : mode === 'signin' ? (
               <>Don't have an account?{' '}
                 <button onClick={() => { setMode('signup'); setError(null); setSuccess(null) }}
                   className="text-lux-gold hover:text-lux-gold/80 font-medium transition-colors">

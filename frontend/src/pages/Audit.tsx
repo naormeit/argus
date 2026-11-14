@@ -186,24 +186,7 @@ export default function Audit() {
     generatePDF(report)
   }
 
-  // Gate: logged in but no credits (anonymous users always pass through)
-  if (false && !authLoading && !user) {
-    return (
-      <div className="min-h-screen bg-lux-black text-lux-white flex items-center justify-center px-4">
-        <div className="text-center max-w-sm">
-          <div className="text-4xl mb-4">🔒</div>
-          <h2 className="text-lg font-bold text-white mb-2">Sign in to run audits</h2>
-          <p className="text-sm text-lux-ice/40 mb-6">Create a free account and get 3 audits instantly.</p>
-          <Link to="/login?next=/audit"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg
-              bg-lux-gold text-lux-black font-semibold text-sm
-              hover:bg-lux-gold/90 transition-colors shadow-md shadow-lux-gold/20">
-            Sign in / Sign up
-          </Link>
-        </div>
-      </div>
-    )
-  }
+  // Anonymous users may audit — credit check is enforced by the backend
 
   // Gate: logged in but no credits
   if (!authLoading && user && hasAccess === false) {

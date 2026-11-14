@@ -123,8 +123,9 @@ def _make_stream(req: AuditRequest, user_id: str | None = None):
                         await deduct_credit(user_id)
                 except Exception as db_err:
                     log.warning(f"Failed to persist audit {audit_id}: {db_err}")
-        except Exception:
-            pass
+        except Exception as exc:
+            log.error("Pipeline failed for audit %s: %s", audit_id, exc)
+            await queue.put(AuditStatus(status='error', message=str(exc)))
         finally:
             await queue.put(None)
 

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import Navbar from './components/Navbar'
+import CookieBanner from './components/CookieBanner'
 import Landing from './pages/Landing'
 import Audit from './pages/Audit'
 import ReportPage from './pages/Report'
@@ -10,6 +11,8 @@ import Pricing from './pages/Pricing'
 import Success from './pages/Success'
 import GitHub from './pages/GitHub'
 import Admin from './pages/Admin'
+import Privacy from './pages/Privacy'
+import Terms from './pages/Terms'
 
 export default function App() {
   return (
@@ -26,8 +29,11 @@ export default function App() {
           <Route path="/success"    element={<Success />} />
           <Route path="/github"     element={<GitHub />} />
           <Route path="/admin"      element={<Admin />} />
+          <Route path="/privacy"    element={<Privacy />} />
+          <Route path="/terms"      element={<Terms />} />
           <Route path="*"           element={<Landing />} />
         </Routes>
+        <CookieBanner />
       </AuthProvider>
     </BrowserRouter>
   )
