@@ -61,7 +61,7 @@ class HunterAgent(BaseAgent):
 
         resp = await self.client.chat.completions.create(
             model=GROQ_SMART_MODEL,
-            max_tokens=3000,
+            max_tokens=900,
             messages=[
                 {"role": "system", "content": _SYSTEM},
                 {"role": "user",   "content": f"Suspicious patterns to reason about:\n{patterns_json}\n\nReturn only valid JSON array."},

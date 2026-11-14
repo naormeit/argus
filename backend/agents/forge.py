@@ -56,7 +56,7 @@ class ForgeAgent(BaseAgent):
 
         resp = await self.client.chat.completions.create(
             model=GROQ_FAST_MODEL,
-            max_tokens=4096,
+            max_tokens=900,
             messages=[
                 {"role": "system", "content": _SYSTEM},
                 {"role": "user",   "content": f"Exploit paths to implement:\n{paths_json}\n\nReturn only valid JSON array."},

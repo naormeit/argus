@@ -20,12 +20,16 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-import stripe
+import hashlib
+import hmac
+import httpx
+
+# import stripe  # Replaced by Lemon Squeezy
 
 from config import (
-    DATABASE_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
-    STRIPE_CREDIT_PRICE_ID, STRIPE_PRO_PRICE_ID, FRONTEND_URL,
+    DATABASE_URL, FRONTEND_URL,
     GITHUB_APP_ID, GITHUB_WEBHOOK_SECRET, GITHUB_APP_NAME, LOOM_SECRET,
+    LS_API_KEY, LS_WEBHOOK_SECRET, LS_STORE_ID, LS_CREDITS_VARIANT_ID, LS_PRO_VARIANT_ID,
 )
 from models import AuditRequest, AuditStatus, AuditReport, AuditListItem
 from pipeline import ArgusPipeline
@@ -34,7 +38,7 @@ from github_fetcher import fetch_github_source, GitHubFetchError
 from auth import verify_supabase_token, get_user_claims
 from config import ADMIN_EMAIL
 
-stripe.api_key = STRIPE_SECRET_KEY
+# stripe.api_key = STRIPE_SECRET_KEY  # Replaced by Lemon Squeezy
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -357,87 +361,127 @@ async def me(request: Request):
     }
 
 
+async def _ls_create_checkout(variant_id: str, user_id: str, email: str, success_url: str) -> str:
+    """Create a Lemon Squeezy checkout and return the hosted URL."""
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(
+            "https://api.lemonsqueezy.com/v1/checkouts",
+            headers={
+                "Authorization": f"Bearer {LS_API_KEY}",
+                "Accept": "application/vnd.api+json",
+                "Content-Type": "application/vnd.api+json",
+            },
+            json={
+                "data": {
+                    "type": "checkouts",
+                    "attributes": {
+                        "checkout_data": {
+                            "email": email or None,
+                            "custom": {"user_id": user_id},
+                        },
+                        "product_options": {"redirect_url": success_url},
+                    },
+                    "relationships": {
+                        "store":   {"data": {"type": "stores",   "id": LS_STORE_ID}},
+                        "variant": {"data": {"type": "variants", "id": variant_id}},
+                    },
+                }
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()["data"]["attributes"]["url"]
+
+
 @app.post("/checkout/credits")
 async def checkout_credits(request: Request):
-    """Create a Stripe Checkout session for the 10-audit credit pack ($9.99)."""
+    """Create a Lemon Squeezy checkout for the 10-audit credit pack ($9.99)."""
     user_id = _get_user_id(request)
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required.")
-    if not STRIPE_SECRET_KEY or not STRIPE_CREDIT_PRICE_ID:
+    if not LS_API_KEY or not LS_CREDITS_VARIANT_ID:
         raise HTTPException(status_code=503, detail="Billing not configured.")
     body = await request.json()
     email = body.get("email", "")
-    session = stripe.checkout.Session.create(
-        mode="payment",
-        line_items=[{"price": STRIPE_CREDIT_PRICE_ID, "quantity": 1}],
-        client_reference_id=user_id,
-        customer_email=email or None,
-        success_url=f"{FRONTEND_URL}/success?type=credits&session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{FRONTEND_URL}/pricing",
-    )
-    return {"url": session.url}
+    try:
+        url = await _ls_create_checkout(
+            LS_CREDITS_VARIANT_ID, user_id, email,
+            f"{FRONTEND_URL}/success?type=credits",
+        )
+    except httpx.HTTPStatusError as exc:
+        log.error("Lemon Squeezy checkout error: %s", exc.response.text)
+        raise HTTPException(status_code=502, detail="Could not create checkout session.")
+    return {"url": url}
 
 
 @app.post("/checkout/subscribe")
 async def checkout_subscribe(request: Request):
-    """Create a Stripe Checkout session for the Pro subscription ($29/month)."""
+    """Create a Lemon Squeezy checkout for the Pro subscription ($29/month)."""
     user_id = _get_user_id(request)
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required.")
-    if not STRIPE_SECRET_KEY or not STRIPE_PRO_PRICE_ID:
+    if not LS_API_KEY or not LS_PRO_VARIANT_ID:
         raise HTTPException(status_code=503, detail="Billing not configured.")
     body = await request.json()
     email = body.get("email", "")
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        line_items=[{"price": STRIPE_PRO_PRICE_ID, "quantity": 1}],
-        client_reference_id=user_id,
-        customer_email=email or None,
-        success_url=f"{FRONTEND_URL}/success?type=pro&session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{FRONTEND_URL}/pricing",
-    )
-    return {"url": session.url}
+    try:
+        url = await _ls_create_checkout(
+            LS_PRO_VARIANT_ID, user_id, email,
+            f"{FRONTEND_URL}/success?type=pro",
+        )
+    except httpx.HTTPStatusError as exc:
+        log.error("Lemon Squeezy checkout error: %s", exc.response.text)
+        raise HTTPException(status_code=502, detail="Could not create checkout session.")
+    return {"url": url}
 
 
-@app.post("/webhooks/stripe")
-async def stripe_webhook(request: Request):
-    """Handle Stripe webhook events."""
-    if not STRIPE_WEBHOOK_SECRET:
+@app.post("/webhooks/lemonsqueezy")
+async def ls_webhook(request: Request):
+    """Handle Lemon Squeezy webhook events."""
+    if not LS_WEBHOOK_SECRET:
         raise HTTPException(status_code=503, detail="Webhook secret not configured.")
     payload = await request.body()
-    sig = request.headers.get("stripe-signature", "")
-    try:
-        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
-    except stripe.error.SignatureVerificationError:
-        raise HTTPException(status_code=400, detail="Invalid Stripe signature.")
+    sig = request.headers.get("X-Signature", "")
+    expected = hmac.new(LS_WEBHOOK_SECRET.encode(), payload, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, sig):
+        raise HTTPException(status_code=400, detail="Invalid signature.")
 
     if not _db_enabled:
         return {"received": True}
 
-    etype = event["type"]
-    data = event["data"]["object"]
+    event = json.loads(payload)
+    etype = request.headers.get("X-Event-Name", "")
+    meta = event.get("meta", {})
+    custom = meta.get("custom_data", {})
+    user_id = custom.get("user_id")
+    attrs = event.get("data", {}).get("attributes", {})
 
-    if etype == "checkout.session.completed":
-        user_id = data.get("client_reference_id")
-        customer_id = data.get("customer")
-        if not user_id:
-            return {"received": True}
-        if data.get("mode") == "payment":
+    if etype == "order_created":
+        variant_id = str(
+            (event.get("data", {}).get("relationships", {})
+             .get("order-items", {}).get("data") or [{}])[0].get("id", "")
+        )
+        # Simpler: check the first_order_item variant_id if present
+        first_item = attrs.get("first_order_item", {})
+        actual_variant = str(first_item.get("variant_id", ""))
+        if user_id and actual_variant == LS_CREDITS_VARIANT_ID:
             await add_credits(user_id, CREDITS_PER_PACK)
-            log.info("Added %d credits to user %s", CREDITS_PER_PACK, user_id)
-        elif data.get("mode") == "subscription":
-            sub_id = data.get("subscription")
+            log.info("LS: added %d credits to user %s", CREDITS_PER_PACK, user_id)
+
+    elif etype == "subscription_created":
+        sub_id = str(event.get("data", {}).get("id", ""))
+        customer_id = str(attrs.get("customer_id", ""))
+        if user_id:
             await activate_subscription(user_id, sub_id, customer_id)
-            log.info("Activated Pro subscription for user %s", user_id)
+            log.info("LS: activated Pro subscription for user %s", user_id)
 
-    elif etype in ("customer.subscription.deleted",):
-        customer_id = data.get("customer")
+    elif etype == "subscription_cancelled":
+        customer_id = str(attrs.get("customer_id", ""))
         await cancel_subscription_by_customer(customer_id)
-        log.info("Cancelled subscription for customer %s", customer_id)
+        log.info("LS: cancelled subscription for customer %s", customer_id)
 
-    elif etype in ("customer.subscription.updated",):
-        customer_id = data.get("customer")
-        status = data.get("status", "canceled")
+    elif etype == "subscription_updated":
+        customer_id = str(attrs.get("customer_id", ""))
+        status = attrs.get("status", "cancelled")
         await update_subscription_status(customer_id, status)
 
     return {"received": True}
