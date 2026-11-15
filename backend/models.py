@@ -1,7 +1,9 @@
 from __future__ import annotations
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from enum import Enum
+
+ALLOWED_LANGUAGES = {"solidity", "vyper", "rust", "go", "python", "typescript", "javascript"}
 
 
 class Severity(str, Enum):
@@ -67,12 +69,20 @@ class AuditReport(BaseModel):
 MAX_CODE_BYTES = 500_000  # 500 KB — prevents pipeline OOM on huge pastes
 
 class AuditRequest(BaseModel):
-    code:        str = Field(..., max_length=MAX_CODE_BYTES)
+    code:        str = Field(..., min_length=1, max_length=MAX_CODE_BYTES)
     language:    str = "solidity"
-    audit_id:    Optional[str] = None
-    source_type: str = "paste"          # 'paste' | 'address'
-    source_ref:  Optional[str] = None   # contract address
-    network:     Optional[str] = None   # 'ethereum' | 'base' | ...
+    audit_id:    Optional[str] = None   # server-assigned; ignored if supplied by client
+    source_type: str = "paste"          # 'paste' | 'address' | 'github' | 'github_pr'
+    source_ref:  Optional[str] = None
+    network:     Optional[str] = None
+
+    @field_validator("language")
+    @classmethod
+    def validate_language(cls, v: str) -> str:
+        v = v.lower().strip()
+        if v not in ALLOWED_LANGUAGES:
+            raise ValueError(f"Unsupported language '{v}'. Allowed: {sorted(ALLOWED_LANGUAGES)}")
+        return v
 
 
 class AuditListItem(BaseModel):

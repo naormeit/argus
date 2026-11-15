@@ -34,6 +34,31 @@ async def has_audit_access(user_id: str) -> bool:
     return info["credits"] > 0
 
 
+async def atomic_deduct_credit(user_id: str) -> bool:
+    """Atomically check access and deduct one credit. Returns True if access granted.
+    Pro subscribers always pass without deduction. Credit users require credits > 0
+    and the deduction happens in the same SQL statement (eliminates TOCTOU race)."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await _ensure_row(conn, user_id)
+        row = await conn.fetchrow(
+            "SELECT plan, subscription_status FROM user_credits WHERE user_id = $1",
+            user_id,
+        )
+        if row and row["plan"] == "pro" and row.get("subscription_status") == "active":
+            return True
+        result = await conn.fetchrow(
+            """
+            UPDATE user_credits
+               SET credits = credits - 1, updated_at = NOW()
+             WHERE user_id = $1 AND credits > 0
+            RETURNING credits
+            """,
+            user_id,
+        )
+        return result is not None
+
+
 async def deduct_credit(user_id: str) -> None:
     pool = await get_pool()
     async with pool.acquire() as conn:

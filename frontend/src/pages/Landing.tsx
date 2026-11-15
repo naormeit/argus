@@ -324,7 +324,7 @@ export default function Landing() {
 
           {/* Trust */}
           <div className={`mt-10 flex items-center gap-6 flex-wrap ${heroInView ? 'reveal-up d-4' : 'opacity-0'}`}>
-            {['No sign-up required', 'HMAC-signed reports'].map(t => (
+            {['3 free audits on sign-up', 'HMAC-signed reports'].map(t => (
               <span key={t} className="flex items-center gap-1.5 text-xs text-lux-ice/30">
                 <span className="text-lux-gold/60"><IconCheck /></span> {t}
               </span>
@@ -480,7 +480,7 @@ export default function Landing() {
               Ready to audit?
             </h2>
             <p className="text-lux-ice/38 mb-12 text-sm leading-relaxed max-w-md mx-auto">
-              No account. No waiting list. Paste your contract and get a full
+              Sign up free — 3 audits included. Paste your contract and get a full
               report with working PoC exploits in under 90 seconds.
             </p>
             <MagneticLink
