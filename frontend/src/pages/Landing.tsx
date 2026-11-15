@@ -281,8 +281,8 @@ export default function Landing() {
         backgroundSize: '40px 40px' }} />
 
       {/* ── Hero ───────────────────────────────────────────── */}
-      <section className="relative max-w-7xl mx-auto px-6 pt-20 pb-28 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center" style={{ zIndex: 2 }}>
-        <div ref={heroRef}>
+      <section className="relative max-w-7xl mx-auto px-6 pt-20 pb-28 grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10 xl:gap-16 items-center" style={{ zIndex: 2 }}>
+        <div ref={heroRef} className="min-w-0">
           {/* Eyebrow */}
           <div className={`flex items-center gap-3 mb-8 ${heroInView ? 'reveal-up d-0' : 'opacity-0'}`}>
             <span className={`h-px bg-lux-gold/40 line-grow ${heroInView ? 'line-grow' : ''}`} style={{ width: heroInView ? '1.5rem' : 0, transition: 'width 0.6s ease 0.2s' }} />
@@ -291,7 +291,7 @@ export default function Landing() {
           </div>
 
           {/* Headline — Syne font */}
-          <h1 className={`font-display text-5xl sm:text-[62px] font-extrabold tracking-tight leading-[1.03] mb-6 ${heroInView ? 'reveal-up d-1' : 'opacity-0'}`}>
+          <h1 className={`font-display text-4xl sm:text-5xl lg:text-[46px] xl:text-[62px] font-extrabold tracking-tight leading-[1.05] mb-6 ${heroInView ? 'reveal-up d-1' : 'opacity-0'}`}>
             <span className="text-lux-white">Find</span>{' '}
             <span className="text-lux-white">vulnerabilities</span>
             <br />
