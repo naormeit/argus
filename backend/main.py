@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import uuid
 from contextlib import asynccontextmanager
 
@@ -61,7 +62,7 @@ _db_enabled = bool(DATABASE_URL)
 if _db_enabled:
     from database import get_pool, close_pool, save_audit, get_audit, list_audits, list_audits_for_user, admin_stats
     from billing import (
-        get_credits, has_audit_access, deduct_credit, add_credits,
+        get_credits, has_audit_access, atomic_deduct_credit, deduct_credit, add_credits,
         activate_subscription, cancel_subscription_by_customer, update_subscription_status,
         CREDITS_PER_PACK,
     )
@@ -117,7 +118,7 @@ def _get_user_id(request: Request) -> str | None:
 
 def _make_stream(req: AuditRequest, user_id: str | None = None):
     """Return an SSE StreamingResponse that runs the pipeline and persists the result."""
-    audit_id = req.audit_id or str(uuid.uuid4())
+    audit_id = str(uuid.uuid4())  # always server-generated; never trust client-supplied value
     queue: asyncio.Queue[AuditStatus | None] = asyncio.Queue()
 
     async def on_progress(status: AuditStatus):
@@ -140,8 +141,6 @@ def _make_stream(req: AuditRequest, user_id: str | None = None):
                             network=req.network,
                             user_id=user_id,
                         )
-                        if user_id:
-                            await deduct_credit(user_id)
                     except Exception as db_err:
                         log.warning(f"Failed to persist audit {audit_id}: {db_err}")
             except Exception as exc:
@@ -178,12 +177,16 @@ async def health():
     return {"status": "ok", "service": "argus", "db": _db_enabled}
 
 
-async def _require_credits(request: Request) -> str | None:
-    """Soft auth: returns user_id if a valid JWT is present, None for anonymous.
-    Blocks only when a logged-in user has no credits left."""
+async def _require_auth_and_deduct(request: Request) -> str:
+    """Hard auth + atomic credit deduction. Raises 401 if unauthenticated,
+    402 if the user has no credits. Credit is deducted atomically before the
+    pipeline starts to prevent TOCTOU race conditions."""
     user_id = _get_user_id(request)
-    if user_id and _db_enabled and not await has_audit_access(user_id):
-        raise HTTPException(status_code=402, detail="No credits remaining. Please top up.")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required. Sign in to run an audit.")
+    if _db_enabled:
+        if not await atomic_deduct_credit(user_id):
+            raise HTTPException(status_code=402, detail="No credits remaining. Please top up.")
     return user_id
 
 
@@ -191,15 +194,19 @@ async def _require_credits(request: Request) -> str | None:
 @limiter.limit("5/minute;20/hour")
 async def stream_audit(req: AuditRequest, request: Request):
     """Stream a code-paste audit via SSE."""
-    user_id = await _require_credits(request)
+    user_id = await _require_auth_and_deduct(request)
     return _make_stream(req, user_id=user_id)
 
+
+_ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
 
 @app.post("/audit/address")
 @limiter.limit("5/minute;20/hour")
 async def audit_address(address: str, network: str = "ethereum", request: Request = None):
     """Fetch verified source from a block explorer, then stream the audit."""
-    user_id = await _require_credits(request)
+    if not _ADDRESS_RE.match(address):
+        raise HTTPException(status_code=400, detail="Invalid contract address. Expected 0x followed by 40 hex characters.")
+    user_id = await _require_auth_and_deduct(request)
     try:
         source, contract_name = await fetch_contract_source(address, network)
     except ContractNotVerified as e:
@@ -223,7 +230,7 @@ async def audit_address(address: str, network: str = "ethereum", request: Reques
 @limiter.limit("5/minute;20/hour")
 async def audit_github(url: str, request: Request = None):
     """Fetch .sol source from a GitHub URL, then stream the audit."""
-    user_id = await _require_credits(request)
+    user_id = await _require_auth_and_deduct(request)
     try:
         source, label = await fetch_github_source(url)
     except GitHubFetchError as e:
@@ -252,8 +259,11 @@ async def get_report(audit_id: str):
 
 
 @app.get("/reports", response_model=list[AuditListItem])
-async def recent_reports(limit: int = 20):
-    """List the most recent audits."""
+async def recent_reports(limit: int = 20, request: Request = None):
+    """List the most recent audits. Requires authentication."""
+    user_id = _get_user_id(request) if request else None
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required.")
     if not _db_enabled:
         return []
     rows = await list_audits(min(limit, 100))
