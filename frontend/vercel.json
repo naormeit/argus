@@ -1,4 +1,20 @@
 {
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-XSS-Protection", "value": "1; mode=block" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "geolocation=(), microphone=(), camera=()" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://argus-backend-1ge3.onrender.com https://*.supabase.co https://api.lemonsqueezy.com; frame-ancestors 'none';"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/api/audit/:path*",  "destination": "https://argus-backend-1ge3.onrender.com/audit/:path*" },
     { "source": "/api/report/:path*", "destination": "https://argus-backend-1ge3.onrender.com/report/:path*" },
