@@ -1,0 +1,15 @@
+{
+  "name": "Argus — Multi-Agent Smart Contract Security Auditor",
+  "short_name": "Argus",
+  "description": "Automated multi-agent security analysis for Ethereum and EVM smart contracts.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#121111",
+  "theme_color": "#121111",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/favicon-32.png", "sizes": "32x32", "type": "image/png" }
+  ]
+}

@@ -1,14 +1,86 @@
 {
   "rewrites": [
-    { "source": "/api/audit/:path*",  "destination": "https://argus-backend-1ge3.onrender.com/audit/:path*" },
-    { "source": "/api/report/:path*", "destination": "https://argus-backend-1ge3.onrender.com/report/:path*" },
-    { "source": "/api/reports",       "destination": "https://argus-backend-1ge3.onrender.com/reports" },
+    { "source": "/api/webhooks/:path*",  "destination": "https://argus-backend-1ge3.onrender.com/webhooks/:path*" },
+    { "source": "/api/audit/:path*",     "destination": "https://argus-backend-1ge3.onrender.com/audit/:path*" },
+    { "source": "/api/report/:path*",    "destination": "https://argus-backend-1ge3.onrender.com/report/:path*" },
+    { "source": "/api/reports",          "destination": "https://argus-backend-1ge3.onrender.com/reports" },
     { "source": "/api/audits/:path*",    "destination": "https://argus-backend-1ge3.onrender.com/audits/:path*" },
     { "source": "/api/me",               "destination": "https://argus-backend-1ge3.onrender.com/me" },
     { "source": "/api/checkout/:path*",  "destination": "https://argus-backend-1ge3.onrender.com/checkout/:path*" },
     { "source": "/api/github/:path*",    "destination": "https://argus-backend-1ge3.onrender.com/github/:path*" },
     { "source": "/api/health",           "destination": "https://argus-backend-1ge3.onrender.com/health" },
     { "source": "/api/admin/:path*",     "destination": "https://argus-backend-1ge3.onrender.com/admin/:path*" },
-    { "source": "/(.*)",              "destination": "/index.html" }
+
+    { "source": "/audit",            "destination": "/index.html" },
+    { "source": "/login",            "destination": "/index.html" },
+    { "source": "/reset-password",   "destination": "/index.html" },
+    { "source": "/dashboard",        "destination": "/index.html" },
+    { "source": "/success",          "destination": "/index.html" },
+    { "source": "/github",           "destination": "/index.html" },
+    { "source": "/admin",            "destination": "/index.html" },
+    { "source": "/report/:path*",    "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=()" },
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/og.png",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400" }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    },
+    {
+      "source": "/dashboard",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/admin",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/report/(.*)",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/login",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/reset-password",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/success",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/audit",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/github",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    }
   ]
 }

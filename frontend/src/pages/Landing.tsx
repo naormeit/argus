@@ -511,7 +511,7 @@ export default function Landing() {
           <div>
             <div className="text-[10px] font-mono text-lux-gold/35 mb-4 uppercase tracking-widest">Product</div>
             <div className="space-y-2.5">
-              {[['Audit', '/audit'], ['Pricing', '/pricing'], ['Home', '/']].map(([label, to]) => (
+              {[['Audit', '/audit'], ['Pricing', '/pricing'], ['About', '/about'], ['Contact', '/contact']].map(([label, to]) => (
                 <Link key={label} to={to} className="block text-xs text-lux-ice/25 hover:text-lux-gold/65 transition-colors">{label}</Link>
               ))}
             </div>

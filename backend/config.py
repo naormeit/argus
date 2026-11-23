@@ -26,6 +26,8 @@ LS_STORE_ID             = os.getenv("LS_STORE_ID", "")
 LS_CREDITS_VARIANT_ID   = os.getenv("LS_CREDITS_VARIANT_ID", "")  # $9.99 / 10 audits
 LS_PRO_VARIANT_ID       = os.getenv("LS_PRO_VARIANT_ID", "")      # $29/month
 FRONTEND_URL             = os.getenv("FRONTEND_URL", "https://frontend-eight-theta-43.vercel.app")
+# API docs are off unless explicitly enabled (keeps the public surface small).
+ENABLE_API_DOCS          = os.getenv("ENABLE_API_DOCS", "").strip().lower() in ("1", "true", "yes")
 GITHUB_APP_ID            = os.getenv("GITHUB_APP_ID", "")
 GITHUB_PRIVATE_KEY       = os.getenv("GITHUB_PRIVATE_KEY", "").replace("\\n", "\n")
 GITHUB_WEBHOOK_SECRET    = os.getenv("GITHUB_WEBHOOK_SECRET", "")

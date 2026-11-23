@@ -4,7 +4,9 @@ import { useAuth } from '../context/AuthContext'
 interface CreditsInfo {
   credits: number
   plan: 'free' | 'credits' | 'pro'
+  pro_active?: boolean
   subscription_status: string | null
+  subscription_ends_at?: string | null
 }
 
 export function useCredits() {
@@ -30,7 +32,7 @@ export function useCredits() {
   useEffect(() => { refresh() }, [refresh])
 
   const hasAccess = info
-    ? (info.plan === 'pro' && info.subscription_status === 'active') || info.credits > 0
+    ? (info.pro_active ?? info.plan === 'pro') || info.credits > 0
     : null
 
   return { info, loading, refresh, hasAccess }

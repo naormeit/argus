@@ -10,5 +10,9 @@ services:
         sync: false
       - key: LOOM_SECRET
         sync: false
+      - key: FRONTEND_URL
+        value: https://frontend-eight-theta-43.vercel.app
       - key: CORS_ORIGINS
         value: https://frontend-eight-theta-43.vercel.app
+      - key: ENABLE_API_DOCS
+        value: "false"

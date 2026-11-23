@@ -1,15 +1,32 @@
-import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+
+function safeNext(value: string | null): string {
+  // Only allow same-origin, absolute-path redirects.
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/dashboard'
+  return value
+}
 
 export default function Login() {
   const navigate = useNavigate()
-  const [mode,     setMode]     = useState<'signin' | 'signup' | 'reset'>('signin')
+  const [searchParams] = useSearchParams()
+  const [mode,     setMode]     = useState<'signin' | 'signup' | 'reset'>(
+    searchParams.get('mode') === 'reset' ? 'reset' : 'signin',
+  )
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState<string | null>(null)
   const [success,  setSuccess]  = useState<string | null>(null)
+
+  // Old reset emails linked to /login?mode=update-password. Supabase exchanges
+  // the token in the URL hash on load, so hand over to the dedicated page.
+  useEffect(() => {
+    if (searchParams.get('mode') === 'update-password') {
+      navigate(`/reset-password${window.location.search}${window.location.hash}`, { replace: true })
+    }
+  }, [navigate, searchParams])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,23 +39,27 @@ export default function Login() {
       if (error) {
         setError(error.message)
       } else {
-        navigate('/dashboard')
+        navigate(safeNext(searchParams.get('next')), { replace: true })
       }
     } else if (mode === 'signup') {
-      const { error } = await supabase.auth.signUp({ email, password })
-      if (error) {
-        setError(error.message)
-      } else {
-        setSuccess('Check your email for a confirmation link.')
-      }
-    } else {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/login?mode=update-password`,
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: `${window.location.origin}/dashboard` },
       })
       if (error) {
         setError(error.message)
       } else {
-        setSuccess('Password reset email sent. Check your inbox.')
+        setSuccess('Check your email for a confirmation link, then sign in.')
+      }
+    } else {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+      if (error) {
+        setError(error.message)
+      } else {
+        setSuccess('Password reset email sent. Open the newest link in your inbox.')
       }
     }
     setLoading(false)

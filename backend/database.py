@@ -85,6 +85,33 @@ async def list_audits(limit: int = 20) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+async def claim_webhook_event(event_id: str, event_name: str = "") -> bool:
+    """Record a provider webhook event, returning True only the first time.
+
+    Uses INSERT ... ON CONFLICT DO NOTHING so concurrent deliveries of the same
+    event are de-duplicated by the database, not by application memory.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO webhook_events (event_id, event_name)
+            VALUES ($1, $2)
+            ON CONFLICT (event_id) DO NOTHING
+            RETURNING event_id
+            """,
+            event_id, event_name,
+        )
+        return row is not None
+
+
+async def release_webhook_event(event_id: str) -> None:
+    """Drop an event claim so a failed handler can be retried by the provider."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("DELETE FROM webhook_events WHERE event_id = $1", event_id)
+
+
 async def admin_stats() -> dict:
     pool = await get_pool()
     async with pool.acquire() as conn:

@@ -221,13 +221,22 @@ A `Dockerfile` and `deploy.sh` are included in the repo root for Cloud Run deplo
 
 ### Frontend — Vercel
 
-The frontend is deployed on [Vercel](https://vercel.com). Set the following in Vercel project settings:
+The frontend is deployed on [Vercel](https://vercel.com). Set the following in Vercel project settings (Production, and Preview if you want auth in previews):
 
 ```
-VITE_API_URL=https://argus-backend-1ge3.onrender.com
+VITE_SITE_URL=https://your-domain.example          # canonical origin, no trailing slash
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=<anon key>
+VITE_CONTACT_EMAIL=you@example.com                 # optional, defaults to the repo contact
 ```
 
-The `frontend/vercel.json` rewrites `/api/*` → backend URL.
+`frontend/vercel.json` rewrites `/api/*` → the Render backend, plus `/api/webhooks/*` as a
+fallback. Marketing pages are prerendered during `npm run build`; set `SKIP_PRERENDER=1`
+only if the build environment cannot launch Chrome.
+
+> **Full production checklist:** database migrations, Render / Supabase / Lemon Squeezy
+> settings, custom domain, webhook retries and verification commands are documented in
+> [`docs/production-setup.md`](docs/production-setup.md).
 
 ---
 

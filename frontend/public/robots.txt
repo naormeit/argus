@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /audit
+Disallow: /report/
+Disallow: /login
+Disallow: /reset-password
+Disallow: /success
+Disallow: /github
+
+Sitemap: https://frontend-eight-theta-43.vercel.app/sitemap.xml
