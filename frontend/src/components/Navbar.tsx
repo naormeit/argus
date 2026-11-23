@@ -70,7 +70,7 @@ export default function Navbar() {
         {user ? (
           <div className="flex items-center gap-2">
             {creditsInfo && (
-              creditsInfo.plan === 'pro' && creditsInfo.subscription_status === 'active' ? (
+              creditsInfo.plan === 'pro' ? (
                 <span className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full
                   text-[10px] font-bold uppercase tracking-wide border border-lux-gold/40 text-lux-gold/80 bg-lux-gold/5">
                   Pro

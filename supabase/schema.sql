@@ -26,3 +26,18 @@ CREATE INDEX IF NOT EXISTS audits_source_ref_idx ON audits (source_ref) WHERE so
 -- Run this migration in Supabase SQL Editor after enabling Auth
 ALTER TABLE audits ADD COLUMN IF NOT EXISTS user_id UUID;
 CREATE INDEX IF NOT EXISTS audits_user_id_idx ON audits (user_id) WHERE user_id IS NOT NULL;
+
+-- Row level security: the anon/authenticated key may only read and create rows
+-- it owns. The backend connects as the database owner and bypasses RLS.
+ALTER TABLE audits ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "owners read own audits" ON audits;
+CREATE POLICY "owners read own audits"
+  ON audits FOR SELECT
+  USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "owners insert own audits" ON audits;
+CREATE POLICY "owners insert own audits"
+  ON audits FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+

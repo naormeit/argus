@@ -31,6 +31,7 @@ from config import (
     DATABASE_URL, FRONTEND_URL,
     GITHUB_APP_ID, GITHUB_WEBHOOK_SECRET, GITHUB_APP_NAME, LOOM_SECRET,
     LS_API_KEY, LS_WEBHOOK_SECRET, LS_STORE_ID, LS_CREDITS_VARIANT_ID, LS_PRO_VARIANT_ID,
+    ENABLE_API_DOCS,
 )
 from models import AuditRequest, AuditStatus, AuditReport, AuditListItem
 from pipeline import ArgusPipeline
@@ -60,11 +61,14 @@ pipeline = ArgusPipeline()
 # DB is optional — gracefully disabled if DATABASE_URL is not set
 _db_enabled = bool(DATABASE_URL)
 if _db_enabled:
-    from database import get_pool, close_pool, save_audit, get_audit, list_audits, list_audits_for_user, admin_stats
+    from database import (
+        get_pool, close_pool, save_audit, get_audit, list_audits, list_audits_for_user,
+        admin_stats, claim_webhook_event, release_webhook_event, ensure_schema,
+    )
     from billing import (
         get_credits, has_audit_access, atomic_deduct_credit, deduct_credit, add_credits,
-        activate_subscription, cancel_subscription_by_customer, update_subscription_status,
-        CREDITS_PER_PACK,
+        activate_subscription, set_subscription_cancelled, update_subscription_status,
+        refund_credit, subscription_active, CREDITS_PER_PACK,
     )
 
 
@@ -74,6 +78,7 @@ async def lifespan(app: FastAPI):
     if _db_enabled:
         try:
             await get_pool()
+            await ensure_schema()
             log.info("Database connected.")
         except Exception as exc:
             log.warning("Database unavailable at startup (%s) — persistence disabled.", exc)
@@ -85,7 +90,14 @@ async def lifespan(app: FastAPI):
     log.info("Argus backend shutting down.")
 
 
-app = FastAPI(title="Argus — Multi-Agent Security Auditor", version="0.2.0", lifespan=lifespan)
+app = FastAPI(
+    title="Argus — Multi-Agent Security Auditor",
+    version="0.2.0",
+    lifespan=lifespan,
+    docs_url="/docs" if ENABLE_API_DOCS else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if ENABLE_API_DOCS else None,
+)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -145,6 +157,13 @@ def _make_stream(req: AuditRequest, user_id: str | None = None):
                         log.warning(f"Failed to persist audit {audit_id}: {db_err}")
             except Exception as exc:
                 log.error("Pipeline failed for audit %s: %s", audit_id, exc)
+                # The credit was deducted before the stream started; give it back
+                # when no report was produced.
+                if _db_enabled and user_id:
+                    try:
+                        await refund_credit(user_id)
+                    except Exception as refund_err:
+                        log.error("Failed to refund credit for user %s: %s", user_id, refund_err)
                 await queue.put(AuditStatus(audit_id=audit_id, status='error', message=str(exc)))
             finally:
                 await queue.put(None)
@@ -190,6 +209,15 @@ async def _require_auth_and_deduct(request: Request) -> str:
     return user_id
 
 
+async def _refund_on_failure(user_id: str) -> None:
+    """Return the pre-deducted credit when an audit never reaches the pipeline."""
+    if _db_enabled and user_id:
+        try:
+            await refund_credit(user_id)
+        except Exception as exc:
+            log.error("Failed to refund credit for user %s: %s", user_id, exc)
+
+
 @app.post("/audit/stream")
 @limiter.limit("5/minute;20/hour")
 async def stream_audit(req: AuditRequest, request: Request):
@@ -210,11 +238,17 @@ async def audit_address(address: str, network: str = "ethereum", request: Reques
     try:
         source, contract_name = await fetch_contract_source(address, network)
     except ContractNotVerified as e:
+        await _refund_on_failure(user_id)
         raise HTTPException(status_code=422, detail=str(e))
     except ExplorerError as e:
+        await _refund_on_failure(user_id)
         raise HTTPException(status_code=502, detail=str(e))
     except ValueError as e:
+        await _refund_on_failure(user_id)
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        await _refund_on_failure(user_id)
+        raise
 
     req = AuditRequest(
         code=source,
@@ -234,8 +268,10 @@ async def audit_github(url: str, request: Request = None):
     try:
         source, label = await fetch_github_source(url)
     except GitHubFetchError as e:
+        await _refund_on_failure(user_id)
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
+        await _refund_on_failure(user_id)
         raise HTTPException(status_code=502, detail=f"GitHub fetch failed: {e}")
 
     req = AuditRequest(
@@ -260,13 +296,13 @@ async def get_report(audit_id: str):
 
 @app.get("/reports", response_model=list[AuditListItem])
 async def recent_reports(limit: int = 20, request: Request = None):
-    """List the most recent audits. Requires authentication."""
+    """List the authenticated user's most recent audits."""
     user_id = _get_user_id(request) if request else None
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required.")
     if not _db_enabled:
         return []
-    rows = await list_audits(min(limit, 100))
+    rows = await list_audits_for_user(user_id, min(limit, 100))
     return [
         AuditListItem(
             id=str(r["id"]),
@@ -364,10 +400,13 @@ async def me(request: Request):
     if not _db_enabled:
         return {"credits": 0, "plan": "free", "subscription_status": None}
     info = await get_credits(user_id)
+    pro_active = subscription_active(info)
     return {
         "credits": info["credits"],
-        "plan": info["plan"],
+        "plan": "pro" if pro_active else "free",
+        "pro_active": pro_active,
         "subscription_status": info.get("subscription_status"),
+        "subscription_ends_at": info.get("subscription_ends_at"),
     }
 
 
@@ -444,9 +483,70 @@ async def checkout_subscribe(request: Request):
     return {"url": url}
 
 
+async def _handle_ls_event(etype: str, event: dict, meta: dict) -> None:
+    """Apply one Lemon Squeezy event. Caller has already de-duplicated it."""
+    custom = meta.get("custom_data", {}) or {}
+    user_id = custom.get("user_id")
+    data = event.get("data", {}) or {}
+    attrs = data.get("attributes", {}) or {}
+    customer_id = str(attrs.get("customer_id") or "")
+
+    if etype == "order_created":
+        first_item = attrs.get("first_order_item", {}) or {}
+        variant_id = str(first_item.get("variant_id") or "")
+        order_status = attrs.get("status") or "paid"
+        if user_id and variant_id == str(LS_CREDITS_VARIANT_ID) and order_status == "paid":
+            await add_credits(user_id, CREDITS_PER_PACK)
+            log.info("LS: added %d credits to user %s", CREDITS_PER_PACK, user_id)
+        else:
+            log.info(
+                "LS: order_created ignored (variant=%s status=%s user=%s)",
+                variant_id, order_status, user_id,
+            )
+
+    elif etype == "subscription_created":
+        sub_id = str(data.get("id", ""))
+        status = attrs.get("status") or "active"
+        ends_at = attrs.get("ends_at") or attrs.get("renews_at")
+        if user_id:
+            await activate_subscription(user_id, sub_id, customer_id, ends_at, status)
+            log.info("LS: activated Pro subscription for user %s", user_id)
+        else:
+            log.warning("LS: subscription_created without custom user_id (sub=%s)", sub_id)
+
+    elif etype in ("subscription_cancelled", "subscription_updated"):
+        status = attrs.get("status") or ("cancelled" if etype == "subscription_cancelled" else "active")
+        ends_at = attrs.get("ends_at") or attrs.get("renews_at")
+        if etype == "subscription_cancelled" or status == "cancelled":
+            # Keep Pro access until the period the customer already paid for.
+            await set_subscription_cancelled(customer_id, ends_at)
+        else:
+            await update_subscription_status(customer_id, status, ends_at)
+        log.info("LS: subscription %s for customer %s", status, customer_id)
+
+    elif etype == "subscription_expired":
+        await update_subscription_status(customer_id, "expired", attrs.get("ends_at"))
+        log.info("LS: subscription expired for customer %s", customer_id)
+
+    elif etype == "subscription_paused":
+        await update_subscription_status(customer_id, "paused", attrs.get("ends_at"))
+        log.info("LS: subscription paused for customer %s", customer_id)
+
+    elif etype == "subscription_resumed":
+        await update_subscription_status(customer_id, "active", attrs.get("renews_at"))
+        log.info("LS: subscription resumed for customer %s", customer_id)
+
+    elif etype == "subscription_payment_failed":
+        await update_subscription_status(customer_id, "past_due", attrs.get("ends_at"))
+        log.warning("LS: payment failed for customer %s", customer_id)
+
+    else:
+        log.info("LS: unhandled event type %s", etype)
+
+
 @app.post("/webhooks/lemonsqueezy")
 async def ls_webhook(request: Request):
-    """Handle Lemon Squeezy webhook events."""
+    """Handle Lemon Squeezy webhook events exactly once."""
     if not LS_WEBHOOK_SECRET:
         raise HTTPException(status_code=503, detail="Webhook secret not configured.")
     payload = await request.body()
@@ -455,44 +555,38 @@ async def ls_webhook(request: Request):
     if not hmac.compare_digest(expected, sig):
         raise HTTPException(status_code=400, detail="Invalid signature.")
 
+    try:
+        event = json.loads(payload)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload.")
+
     if not _db_enabled:
         return {"received": True}
 
-    event = json.loads(payload)
-    etype = request.headers.get("X-Event-Name", "")
-    meta = event.get("meta", {})
-    custom = meta.get("custom_data", {})
-    user_id = custom.get("user_id")
-    attrs = event.get("data", {}).get("attributes", {})
+    meta = event.get("meta", {}) or {}
+    etype = request.headers.get("X-Event-Name") or meta.get("event_name", "")
+    event_id = str(meta.get("event_id") or hashlib.sha256(payload).hexdigest())
 
-    if etype == "order_created":
-        variant_id = str(
-            (event.get("data", {}).get("relationships", {})
-             .get("order-items", {}).get("data") or [{}])[0].get("id", "")
-        )
-        # Simpler: check the first_order_item variant_id if present
-        first_item = attrs.get("first_order_item", {})
-        actual_variant = str(first_item.get("variant_id", ""))
-        if user_id and actual_variant == LS_CREDITS_VARIANT_ID:
-            await add_credits(user_id, CREDITS_PER_PACK)
-            log.info("LS: added %d credits to user %s", CREDITS_PER_PACK, user_id)
+    try:
+        first_delivery = await claim_webhook_event(event_id, etype)
+    except Exception as exc:
+        log.error("LS: could not record webhook event %s: %s", event_id, exc)
+        raise HTTPException(status_code=503, detail="Could not record webhook event.")
 
-    elif etype == "subscription_created":
-        sub_id = str(event.get("data", {}).get("id", ""))
-        customer_id = str(attrs.get("customer_id", ""))
-        if user_id:
-            await activate_subscription(user_id, sub_id, customer_id)
-            log.info("LS: activated Pro subscription for user %s", user_id)
+    if not first_delivery:
+        log.info("LS: duplicate webhook %s (%s) ignored", event_id, etype)
+        return {"received": True, "duplicate": True}
 
-    elif etype == "subscription_cancelled":
-        customer_id = str(attrs.get("customer_id", ""))
-        await cancel_subscription_by_customer(customer_id)
-        log.info("LS: cancelled subscription for customer %s", customer_id)
-
-    elif etype == "subscription_updated":
-        customer_id = str(attrs.get("customer_id", ""))
-        status = attrs.get("status", "cancelled")
-        await update_subscription_status(customer_id, status)
+    try:
+        await _handle_ls_event(etype, event, meta)
+    except Exception:
+        # Release the claim so Lemon Squeezy's retry can process it again.
+        try:
+            await release_webhook_event(event_id)
+        except Exception as release_err:
+            log.error("LS: could not release webhook claim %s: %s", event_id, release_err)
+        log.exception("LS: failed to process webhook %s (%s)", event_id, etype)
+        raise HTTPException(status_code=500, detail="Webhook processing failed.")
 
     return {"received": True}
 
