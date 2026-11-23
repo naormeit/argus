@@ -29,6 +29,37 @@ async def close_pool():
         _pool = None
 
 
+async def ensure_schema() -> None:
+    """Idempotently apply the two schema objects required by the current code.
+
+    This keeps a code deploy safe even if the SQL migration has not been run
+    yet. RLS policies are still applied manually from supabase/*.sql, but they
+    are not required for the service to function.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS webhook_events (
+              event_id     TEXT PRIMARY KEY,
+              event_name   TEXT,
+              received_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS webhook_events_received_at_idx "
+            "ON webhook_events (received_at DESC)"
+        )
+        has_credits = await conn.fetchval("SELECT to_regclass('public.user_credits')")
+        if has_credits:
+            await conn.execute(
+                "ALTER TABLE user_credits "
+                "ADD COLUMN IF NOT EXISTS subscription_ends_at TIMESTAMPTZ"
+            )
+    log.info("Schema check complete.")
+
+
 async def save_audit(report_dict: dict, source_code: str, language: str,
                      source_type: str = "paste", source_ref: str | None = None,
                      network: str | None = None,

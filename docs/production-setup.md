@@ -76,7 +76,12 @@ Run both files, in this order:
 1. `supabase/schema.sql`
 2. `supabase/billing_migration.sql`
 
-Both are idempotent. Verify afterwards:
+Both are idempotent. The backend also creates `webhook_events` and adds
+`subscription_ends_at` automatically at startup, so a code deploy does not break
+billing if these migrations have not run yet. The SQL files are still required
+for the RLS policies and indexes.
+
+Verify after running:
 
 ```sql
 select column_name from information_schema.columns

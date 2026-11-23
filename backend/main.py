@@ -63,7 +63,7 @@ _db_enabled = bool(DATABASE_URL)
 if _db_enabled:
     from database import (
         get_pool, close_pool, save_audit, get_audit, list_audits, list_audits_for_user,
-        admin_stats, claim_webhook_event, release_webhook_event,
+        admin_stats, claim_webhook_event, release_webhook_event, ensure_schema,
     )
     from billing import (
         get_credits, has_audit_access, atomic_deduct_credit, deduct_credit, add_credits,
@@ -78,6 +78,7 @@ async def lifespan(app: FastAPI):
     if _db_enabled:
         try:
             await get_pool()
+            await ensure_schema()
             log.info("Database connected.")
         except Exception as exc:
             log.warning("Database unavailable at startup (%s) — persistence disabled.", exc)
